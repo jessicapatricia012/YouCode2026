@@ -68,7 +68,7 @@ router.post('/register', async (req, res) => {
     const role = normRole(roleRaw) ?? 'user';
     const n = String(name || '').trim();
     const e = String(email || '').toLowerCase().trim();
-    const p = String(password || '');
+    const p = String(password || '').trim();
     if (!n || !e || !e.includes('@')) {
       return res.status(400).json({ error: 'invalid_input', message: 'Name and valid email are required.' });
     }
@@ -137,7 +137,7 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body ?? {};
     const e = String(email || '').toLowerCase().trim();
-    const p = String(password || '');
+    const p = String(password || '').trim();
 
     if (!e || !p) {
       return res.status(400).json({ error: 'invalid_input', message: 'Email and password are required.' });

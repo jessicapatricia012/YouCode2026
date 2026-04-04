@@ -23,6 +23,18 @@ export default function EventMap({ events, loading, error, onSignup }) {
   const [popupId, setPopupId] = useState(null);
   const [signupBusy, setSignupBusy] = useState(false);
 
+  const mappableEvents = useMemo(
+    () =>
+      events.filter(
+        (ev) =>
+          typeof ev.lat === 'number' &&
+          typeof ev.lng === 'number' &&
+          Number.isFinite(ev.lat) &&
+          Number.isFinite(ev.lng)
+      ),
+    [events]
+  );
+
   const popupEvent = useMemo(
     () => (popupId ? events.find((e) => e.id === popupId) ?? null : null),
     [events, popupId]
@@ -70,7 +82,7 @@ export default function EventMap({ events, loading, error, onSignup }) {
         onClick={() => setPopupId(null)}
       >
         <NavigationControl position="top-right" />
-        {events.map((ev) => {
+        {mappableEvents.map((ev) => {
           const color = EVENT_TYPE_COLORS[ev.type] ?? '#666';
           return (
             <Marker
@@ -104,12 +116,28 @@ export default function EventMap({ events, loading, error, onSignup }) {
             <div className="map-popup">
               <h3 className="map-popup__title">{popupEvent.title}</h3>
               <p className="map-popup__org">{popupEvent.orgName}</p>
+              <p className="map-popup__meta">
+                {[popupEvent.address, popupEvent.city].filter(Boolean).join(', ') || '—'}
+              </p>
               <p className="map-popup__meta">{formatEventDate(popupEvent.startsAt)}</p>
               <p className="map-popup__meta">
                 {popupEvent.spotsLeft > 0
                   ? `${popupEvent.spotsLeft} spot${popupEvent.spotsLeft === 1 ? '' : 's'} left`
                   : 'Full'}
               </p>
+              {popupEvent.websiteUrl ? (
+                <p className="map-popup__meta">
+                  <a
+                    href={popupEvent.websiteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="map-popup__link"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Event website →
+                  </a>
+                </p>
+              ) : null}
               <button
                 type="button"
                 className="map-popup__cta"

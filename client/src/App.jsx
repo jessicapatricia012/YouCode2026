@@ -9,7 +9,9 @@ import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import RegisterPage from './pages/RegisterPage.jsx';
 import MapPage from './pages/MapPage.jsx';
-import OrganizerPage from './pages/OrganizerPage.jsx';
+import OrgDashboard from './pages/OrgDashboard.jsx';
+import PostEventPage from './pages/PostEventPage.jsx';
+import EditEventPage from './pages/EditEventPage.jsx';
 import './App.css';
 
 function ProtectedRoute({ children }) {
@@ -33,6 +35,21 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
+function OrganizerOnly({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="auth-boot">
+        <p>Checking session…</p>
+      </div>
+    );
+  }
+  if (user?.role !== 'organizer') {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -46,11 +63,34 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route path="/organize" element={<Navigate to="/dashboard" replace />} />
       <Route
-        path="/organize"
+        path="/dashboard"
         element={
           <ProtectedRoute>
-            <OrganizerPage />
+            <OrganizerOnly>
+              <OrgDashboard />
+            </OrganizerOnly>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/post"
+        element={
+          <ProtectedRoute>
+            <OrganizerOnly>
+              <PostEventPage />
+            </OrganizerOnly>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/edit/:id"
+        element={
+          <ProtectedRoute>
+            <OrganizerOnly>
+              <EditEventPage />
+            </OrganizerOnly>
           </ProtectedRoute>
         }
       />

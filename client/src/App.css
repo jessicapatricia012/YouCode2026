@@ -272,6 +272,16 @@
   color: #3f3f46;
 }
 
+.map-popup__link {
+  font-weight: 600;
+  color: var(--connectbc-brand);
+  text-decoration: none;
+}
+
+.map-popup__link:hover {
+  text-decoration: underline;
+}
+
 .map-popup__cta {
   margin-top: 0.65rem;
   width: 100%;

@@ -6,7 +6,7 @@ import './LoginPage.css';
 function destinationAfterAuth(fromState, role) {
   const from = fromState?.from?.pathname;
   if (from && from !== '/login' && from !== '/register') return from;
-  return role === 'organizer' ? '/organize' : '/';
+  return role === 'organizer' ? '/dashboard' : '/';
 }
 
 export default function LoginPage() {
@@ -104,7 +104,7 @@ export default function LoginPage() {
         <p className="login-card__hint">
           After <code>npm run seed</code>: visitor emails like <code>visitor1@connectbc.demo</code>{' '}
           or any seeded org email — password <code>password123</code>. Your account type is stored
-          on the server; no need to pick it when signing in.
+          on the server; no need to pick it when signing in. Seeding clears all user-created accounts.
         </p>
       </div>
     </div>

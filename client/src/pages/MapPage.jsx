@@ -20,6 +20,10 @@ export default function MapPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  useEffect(() => {
+    setIncludedTypes([...EVENT_TYPE_ORDER]);
+  }, [user?.id]);
+
   const queryKey = useMemo(() => {
     const q = typesQuery(includedTypes);
     if (q === null) return 'none';
@@ -39,22 +43,17 @@ export default function MapPage() {
     setError(null);
     const path = queryKey === 'all' ? '/api/events' : `/api/events${queryKey}`;
 
-    fetch(path, { headers: getAuthHeader() })
+    fetch(path)
       .then((r) => {
-        if (r.status === 401) throw new Error('session');
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
       .then((data) => {
         if (!cancelled) setEvents(data.events ?? []);
       })
-      .catch((err) => {
+      .catch(() => {
         if (!cancelled) {
-          if (err.message === 'session') {
-            setError('Your session expired. Sign in again.');
-          } else {
-            setError('Could not load events. Is the API and database running?');
-          }
+          setError('Could not load events. Is the API and database running?');
           setEvents([]);
         }
       })
@@ -65,7 +64,7 @@ export default function MapPage() {
     return () => {
       cancelled = true;
     };
-  }, [queryKey, getAuthHeader]);
+  }, [queryKey]);
 
   const onToggleType = useCallback((type) => {
     setIncludedTypes((prev) =>

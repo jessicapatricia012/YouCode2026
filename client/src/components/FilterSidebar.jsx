@@ -37,7 +37,7 @@ export default function FilterSidebar({
               {userEmail}
             </span>
             {userRole === 'organizer' && (
-              <Link to="/organize" className="sidebar__organize-link">
+              <Link to="/dashboard" className="sidebar__organize-link">
                 Manage listings
               </Link>
             )}
