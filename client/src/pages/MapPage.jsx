@@ -117,6 +117,7 @@ export default function MapPage() {
         onSelectAll={onSelectAll}
         orgName={user?.name}
         userEmail={user?.email}
+        userRole={user?.role}
         onLogout={logout}
       />
       <EventMap

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import {
   EVENT_TYPE_ORDER,
   EVENT_TYPE_COLORS,
@@ -10,6 +11,7 @@ export default function FilterSidebar({
   onSelectAll,
   orgName,
   userEmail,
+  userRole,
   onLogout,
 }) {
   return (
@@ -19,6 +21,13 @@ export default function FilterSidebar({
         <p className="sidebar__subtitle">Nonprofit events across BC · filter by type</p>
         {userEmail && (
           <div className="sidebar__account">
+            {userRole && (
+              <span
+                className={`sidebar__role-badge sidebar__role-badge--${userRole}`}
+              >
+                {userRole === 'organizer' ? 'Organizer' : 'Visitor'}
+              </span>
+            )}
             {orgName && (
               <span className="sidebar__org-name" title={orgName}>
                 {orgName}
@@ -27,6 +36,11 @@ export default function FilterSidebar({
             <span className="sidebar__email" title={userEmail}>
               {userEmail}
             </span>
+            {userRole === 'organizer' && (
+              <Link to="/organize" className="sidebar__organize-link">
+                Manage listings
+              </Link>
+            )}
             {onLogout && (
               <button
                 type="button"

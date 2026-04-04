@@ -36,7 +36,7 @@ export function AuthProvider({ children }) {
       if (r.ok) {
         const data = await r.json();
         setToken(stored);
-        setUser(data.org);
+        setUser(data.user);
       } else {
         localStorage.removeItem(TOKEN_KEY);
         setToken(null);
@@ -72,14 +72,15 @@ export function AuthProvider({ children }) {
     }
     localStorage.setItem(TOKEN_KEY, data.token);
     setToken(data.token);
-    setUser(data.org);
+    setUser(data.user);
+    return data.user;
   }, []);
 
-  const register = useCallback(async (name, email, password) => {
+  const register = useCallback(async (name, email, password, role) => {
     const r = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ name, email, password, role }),
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
@@ -89,12 +90,15 @@ export function AuthProvider({ children }) {
           ? 'An account with this email already exists.'
           : data.error === 'weak_password'
             ? 'Use at least 8 characters for your password.'
-            : 'Could not create account.');
+            : data.error === 'invalid_role'
+              ? 'Choose visitor or organizer.'
+              : 'Could not create account.');
       throw new Error(msg);
     }
     localStorage.setItem(TOKEN_KEY, data.token);
     setToken(data.token);
-    setUser(data.org);
+    setUser(data.user);
+    return data.user;
   }, []);
 
   const logout = useCallback(() => {

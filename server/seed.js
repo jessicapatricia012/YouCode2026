@@ -11,6 +11,12 @@ const MAPBOX_TOKEN = process.env.MAPBOX_TOKEN;
 const PASSWORD = 'password123';
 const BCRYPT_ROUNDS = 10;
 
+const VISITORS = [
+  { display_name: 'Jamie Chen', email: 'visitor1@connectbc.demo' },
+  { display_name: 'Alex Rivera', email: 'visitor2@connectbc.demo' },
+  { display_name: 'Sam Okonkwo', email: 'visitor3@connectbc.demo' },
+];
+
 const ORGS = [
   {
     name: 'Greater Vancouver Food Bank',
@@ -102,10 +108,20 @@ function endsAt(start) {
 
 async function main() {
   console.log('Truncating existing data…');
-  await pool.query('TRUNCATE TABLE signups, events, orgs CASCADE');
+  await pool.query('TRUNCATE TABLE orgs CASCADE');
+  await pool.query('TRUNCATE TABLE users CASCADE');
 
   const hash = await bcrypt.hash(PASSWORD, BCRYPT_ROUNDS);
   const orgIds = [];
+
+  console.log('Inserting visitor accounts (password: password123)…');
+  for (const v of VISITORS) {
+    await pool.query(
+      `INSERT INTO users (display_name, email, password_hash) VALUES ($1, $2, $3)`,
+      [v.display_name, v.email, hash]
+    );
+    console.log(`  ${v.display_name} <${v.email}>`);
+  }
 
   console.log('Inserting orgs (password for all: password123)…');
   for (const o of ORGS) {

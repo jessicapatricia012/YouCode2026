@@ -3,10 +3,15 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import './LoginPage.css';
 
+function destinationAfterAuth(role) {
+  return role === 'organizer' ? '/organize' : '/';
+}
+
 export default function RegisterPage() {
   const { user, loading, register } = useAuth();
   const navigate = useNavigate();
 
+  const [role, setRole] = useState('user');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,7 +28,7 @@ export default function RegisterPage() {
   }
 
   if (user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={destinationAfterAuth(user.role)} replace />;
   }
 
   async function handleSubmit(e) {
@@ -35,8 +40,8 @@ export default function RegisterPage() {
     }
     setSubmitting(true);
     try {
-      await register(name, email, password);
-      navigate('/', { replace: true });
+      const created = await register(name, email, password, role);
+      navigate(destinationAfterAuth(created.role), { replace: true });
     } catch (err) {
       setFormError(err.message || 'Something went wrong.');
     } finally {
@@ -44,28 +49,44 @@ export default function RegisterPage() {
     }
   }
 
+  const nameLabel = role === 'organizer' ? 'Organization name' : 'Your name';
+  const namePlaceholder =
+    role === 'organizer' ? 'Your nonprofit name' : 'First and last name';
+
   return (
     <div className="login-page">
       <div className="login-card">
         <header className="login-card__header">
           <h1 className="login-card__title">Create account</h1>
           <p className="login-card__subtitle">
-            Register your nonprofit organization on ConnectBC. You’ll be signed in right
-            away.
+            Choose whether you&apos;re signing up to volunteer/browse or to represent a nonprofit.
+            Sign-in later uses the same screen for everyone.
           </p>
         </header>
 
         <form className="login-form" onSubmit={handleSubmit}>
           <label className="login-field">
-            <span className="login-field__label">Organization name</span>
+            <span className="login-field__label">Account type</span>
+            <select
+              name="role"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              aria-label="Account type"
+            >
+              <option value="user">Volunteer / browser</option>
+              <option value="organizer">Nonprofit organizer</option>
+            </select>
+          </label>
+          <label className="login-field">
+            <span className="login-field__label">{nameLabel}</span>
             <input
               type="text"
               name="name"
-              autoComplete="organization"
+              autoComplete={role === 'organizer' ? 'organization' : 'name'}
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              placeholder="Your nonprofit name"
+              placeholder={namePlaceholder}
             />
           </label>
           <label className="login-field">
@@ -77,7 +98,7 @@ export default function RegisterPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder="contact@yournonprofit.org"
+              placeholder="you@email.com"
             />
           </label>
           <label className="login-field">

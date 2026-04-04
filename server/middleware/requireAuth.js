@@ -1,8 +1,10 @@
 import jwt from 'jsonwebtoken';
 
+const VALID_ROLES = new Set(['user', 'organizer']);
+
 /**
  * Reads Authorization: Bearer <token>, verifies JWT with JWT_SECRET,
- * attaches req.org = { id, email, name } from payload.
+ * attaches req.auth = { id, email, name, role }.
  */
 export function requireAuth(req, res, next) {
   const header = req.headers.authorization;
@@ -31,16 +33,18 @@ export function requireAuth(req, res, next) {
   try {
     const decoded = jwt.verify(token, secret);
     const id = decoded.sub;
-    if (!id) {
+    const role = decoded.role;
+    if (!id || !VALID_ROLES.has(role)) {
       return res.status(401).json({
         error: 'unauthorized',
-        message: 'Invalid token payload.',
+        message: 'Invalid token payload. Please sign in again.',
       });
     }
-    req.org = {
+    req.auth = {
       id,
       email: decoded.email,
       name: decoded.name,
+      role,
     };
     next();
   } catch (err) {

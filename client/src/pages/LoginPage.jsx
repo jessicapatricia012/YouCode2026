@@ -3,11 +3,16 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import './LoginPage.css';
 
+function destinationAfterAuth(fromState, role) {
+  const from = fromState?.from?.pathname;
+  if (from && from !== '/login' && from !== '/register') return from;
+  return role === 'organizer' ? '/organize' : '/';
+}
+
 export default function LoginPage() {
   const { user, loading, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = location.state?.from?.pathname || '/';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,7 +28,7 @@ export default function LoginPage() {
   }
 
   if (user) {
-    return <Navigate to={from} replace />;
+    return <Navigate to={destinationAfterAuth(location.state, user.role)} replace />;
   }
 
   async function handleSubmit(e) {
@@ -31,8 +36,8 @@ export default function LoginPage() {
     setFormError(null);
     setSubmitting(true);
     try {
-      await login(email, password);
-      navigate(from, { replace: true });
+      const loggedIn = await login(email, password);
+      navigate(destinationAfterAuth(location.state, loggedIn.role), { replace: true });
     } catch (err) {
       setFormError(err.message || 'Something went wrong.');
     } finally {
@@ -46,8 +51,8 @@ export default function LoginPage() {
         <header className="login-card__header">
           <h1 className="login-card__title">Sign in</h1>
           <p className="login-card__subtitle">
-            ConnectBC — sign in with your organization account to browse nonprofit events
-            across BC.
+            One sign-in for ConnectBC. After you log in, visitors browse the map; organizers get
+            extra tools on the Manage listings page.
           </p>
         </header>
 
@@ -61,7 +66,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder="you@organization.org"
+              placeholder="you@email.com"
             />
           </label>
           <label className="login-field">
@@ -97,8 +102,9 @@ export default function LoginPage() {
         </div>
 
         <p className="login-card__hint">
-          After running <code>npm run seed</code>, use any seeded org email with password{' '}
-          <code>password123</code> (see terminal output for emails).
+          After <code>npm run seed</code>: visitor emails like <code>visitor1@connectbc.demo</code>{' '}
+          or any seeded org email — password <code>password123</code>. Your account type is stored
+          on the server; no need to pick it when signing in.
         </p>
       </div>
     </div>

@@ -54,8 +54,8 @@ app.post('/api/events/:id/signups', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const body = req.body ?? {};
-    const name = String(body.name || req.org.name || 'Volunteer').trim();
-    const email = String(body.email || req.org.email || '').trim();
+    const name = String(body.name || req.auth.name || 'Volunteer').trim();
+    const email = String(body.email || req.auth.email || '').trim();
     if (!email) {
       return res.status(400).json({ error: 'invalid_input', message: 'Email is required for signup.' });
     }

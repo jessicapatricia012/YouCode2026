@@ -135,6 +135,22 @@
   background: #fff;
 }
 
+.login-field select {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  font-size: 1rem;
+  border: 1px solid #d4d4d8;
+  border-radius: 10px;
+  background: #fafafa;
+  outline: none;
+  cursor: pointer;
+}
+
+.login-field select:focus {
+  border-color: var(--connectbc-brand);
+  background: #fff;
+}
+
 .login-form__error {
   margin: 0;
   font-size: 0.85rem;

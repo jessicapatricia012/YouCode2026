@@ -1,0 +1,124 @@
+.organizer-page {
+  min-height: 100vh;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color: #18181b;
+  background: #fafafa;
+}
+
+.organizer-page--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #52525b;
+}
+
+.organizer-page__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #e4e4e7;
+  background: #fff;
+}
+
+.organizer-page__eyebrow {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--connectbc-brand);
+}
+
+.organizer-page__title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 650;
+}
+
+.organizer-page__org {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  color: #52525b;
+}
+
+.organizer-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.organizer-page__link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 8px;
+  text-decoration: none;
+  border: 1px solid #d4d4d8;
+  color: #3f3f46;
+  background: #fff;
+}
+
+.organizer-page__link--primary {
+  background: var(--connectbc-brand);
+  border-color: var(--connectbc-brand);
+  color: #fff;
+}
+
+.organizer-page__link--primary:hover {
+  background: var(--connectbc-brand-hover);
+  border-color: var(--connectbc-brand-hover);
+}
+
+.organizer-page__logout {
+  padding: 0.45rem 0.85rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #52525b;
+  background: #fff;
+  border: 1px solid #d4d4d8;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.organizer-page__logout:hover {
+  background: #f4f4f5;
+}
+
+.organizer-page__main {
+  max-width: 40rem;
+  padding: 1.75rem 1.5rem 2rem;
+}
+
+.organizer-page__lead {
+  margin: 0 0 1.5rem;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: #3f3f46;
+}
+
+.organizer-page__placeholder {
+  padding: 1.25rem 1.25rem 1.5rem;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+}
+
+.organizer-page__placeholder h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.organizer-page__placeholder ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: #52525b;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}

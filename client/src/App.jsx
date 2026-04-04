@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import RegisterPage from './pages/RegisterPage.jsx';
 import MapPage from './pages/MapPage.jsx';
+import OrganizerPage from './pages/OrganizerPage.jsx';
 import './App.css';
 
 function ProtectedRoute({ children }) {
@@ -42,6 +43,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <MapPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/organize"
+        element={
+          <ProtectedRoute>
+            <OrganizerPage />
           </ProtectedRoute>
         }
       />
