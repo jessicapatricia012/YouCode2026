@@ -8,15 +8,6 @@
   font-size: 0.95rem;
 }
 
-.sidebar__account {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid #e4e4e7;
-}
-
 .sidebar__role-badge {
   align-self: flex-start;
   font-size: 0.68rem;
@@ -27,6 +18,13 @@
   border-radius: 4px;
 }
 
+.sidebar__role-badge--compact {
+  align-self: center;
+  flex-shrink: 0;
+  padding: 0.15rem 0.35rem;
+  font-size: 0.6rem;
+}
+
 .sidebar__role-badge--user {
   background: var(--connectbc-brand-soft);
   color: var(--connectbc-brand);
@@ -35,78 +33,6 @@
 .sidebar__role-badge--organizer {
   background: #ede9fe;
   color: #5b21b6;
-}
-
-.sidebar__org-name {
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: #18181b;
-  line-height: 1.25;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-.sidebar__email {
-  font-size: 0.78rem;
-  color: #52525b;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebar__organize-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.4rem 0.65rem;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #fff;
-  background: var(--connectbc-brand);
-  border-radius: 6px;
-  text-decoration: none;
-  align-self: flex-start;
-}
-
-.sidebar__organize-link:hover {
-  background: var(--connectbc-brand-hover);
-}
-
-.sidebar__profile-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.4rem 0.65rem;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #fff;
-  background: #10b981;
-  border-radius: 6px;
-  text-decoration: none;
-  align-self: flex-start;
-}
-
-.sidebar__profile-link:hover {
-  background: #059669;
-}
-
-.sidebar__logout {
-  align-self: flex-start;
-  padding: 0.35rem 0.65rem;
-  font-size: 0.78rem;
-  font-weight: 500;
-  color: #3f3f46;
-  background: #fff;
-  border: 1px solid #d4d4d8;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.sidebar__logout:hover {
-  background: #f4f4f5;
 }
 
 .app {
@@ -120,10 +46,149 @@
 .sidebar {
   width: 280px;
   flex-shrink: 0;
-  padding: 1.25rem 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
   border-right: 1px solid #e4e4e7;
   background: #fafafa;
+  overflow: hidden;
+}
+
+.sidebar__body {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1.25rem 1.25rem 1.25rem;
+}
+
+.sidebar__footer {
+  flex-shrink: 0;
+  padding: 0.65rem 0.85rem 0.75rem;
+  background: #ececee;
+  border-top: 1px solid #d4d4d8;
+  box-shadow: 0 -6px 14px rgba(0, 0, 0, 0.06);
+}
+
+.sidebar__user-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.5rem;
+}
+
+.sidebar__user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, var(--connectbc-brand), #1a3d94);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.sidebar__user-meta {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+}
+
+.sidebar__user-name {
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: #18181b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar__user-email {
+  font-size: 0.7rem;
+  color: #71717a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar__user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.sidebar__user-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.32rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 5px;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.sidebar__user-action--primary {
+  color: #fff;
+  background: var(--connectbc-brand);
+}
+
+.sidebar__user-action--primary:hover {
+  background: var(--connectbc-brand-hover);
+}
+
+.sidebar__user-action--profile {
+  color: #fff;
+  background: #059669;
+}
+
+.sidebar__user-action--profile:hover {
+  background: #047857;
+}
+
+.sidebar__user-action--ghost {
+  color: #3f3f46;
+  background: #fff;
+  border: 1px solid #d4d4d8;
+}
+
+.sidebar__user-action--ghost:hover {
+  background: #f4f4f5;
+}
+
+.sidebar__guest-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+}
+
+.sidebar__guest-link {
+  font-weight: 600;
+  color: var(--connectbc-brand);
+  text-decoration: none;
+}
+
+.sidebar__guest-link:hover {
+  text-decoration: underline;
+}
+
+.sidebar__guest-sep {
+  color: #a1a1aa;
+  user-select: none;
 }
 
 .sidebar__header {

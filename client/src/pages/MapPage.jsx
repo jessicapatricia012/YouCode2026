@@ -167,7 +167,9 @@ export default function MapPage() {
               ? 'Event not found.'
               : r.status === 401
                 ? 'Please sign in again.'
-                : 'Signup failed.';
+                : r.status === 403
+                  ? data.message || 'Signup not available for this account.'
+                  : 'Signup failed.';
         window.alert(msg);
         return;
       }
@@ -204,6 +206,7 @@ export default function MapPage() {
         onSignup={onSignup}
         userCoords={userCoords}
         radiusKm={radiusKmForCircle}
+        organizerCannotVolunteer={user?.role === 'organizer'}
       />
     </div>
   );

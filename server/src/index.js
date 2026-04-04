@@ -172,6 +172,12 @@ app.get('/api/events/:id', requireAuth, async (req, res) => {
 
 app.post('/api/events/:id/signups', requireAuth, async (req, res) => {
   try {
+    if (req.auth.role === 'organizer') {
+      return res.status(403).json({
+        error: 'organizers_cannot_signup',
+        message: 'Organizer accounts cannot sign up for events.',
+      });
+    }
     const { id } = req.params;
     const body = req.body ?? {};
     const name = String(body.name || req.auth.name || 'Volunteer').trim();

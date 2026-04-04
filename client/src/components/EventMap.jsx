@@ -24,7 +24,15 @@ const RADIUS_FILL = '#214bb2';
 const RADIUS_FILL_OPACITY = 0.1;
 const RADIUS_LINE_OPACITY = 0.65;
 
-export default function EventMap({ events, loading, error, onSignup, userCoords, radiusKm }) {
+export default function EventMap({
+  events,
+  loading,
+  error,
+  onSignup,
+  userCoords,
+  radiusKm,
+  organizerCannotVolunteer = false,
+}) {
   const mapRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
   const [popupId, setPopupId] = useState(null);
@@ -207,17 +215,19 @@ export default function EventMap({ events, loading, error, onSignup, userCoords,
                   </a>
                 </p>
               ) : null}
-              <button
-                type="button"
-                className="map-popup__cta"
-                disabled={popupEvent.spotsLeft <= 0 || signupBusy}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSignup();
-                }}
-              >
-                {signupBusy ? 'Signing up…' : "I'm in"}
-              </button>
+              {!organizerCannotVolunteer ? (
+                <button
+                  type="button"
+                  className="map-popup__cta"
+                  disabled={popupEvent.spotsLeft <= 0 || signupBusy}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSignup();
+                  }}
+                >
+                  {signupBusy ? 'Signing up…' : "I'm in"}
+                </button>
+              ) : null}
             </div>
           </Popup>
         )}
