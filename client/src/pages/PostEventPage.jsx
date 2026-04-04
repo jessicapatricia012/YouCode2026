@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
+import SkillTagPicker from '../components/SkillTagPicker.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { EVENT_TYPE_LABELS, EVENT_TYPE_ORDER } from '../eventTypes.js';
 import './PostEventPage.css';
@@ -17,6 +18,7 @@ export default function PostEventPage() {
   const [endsAt, setEndsAt] = useState('');
   const [spotsTotal, setSpotsTotal] = useState('');
   const [websiteUrl, setWebsiteUrl] = useState('');
+  const [skillTags, setSkillTags] = useState([]);
 
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState(null);
@@ -75,6 +77,9 @@ export default function PostEventPage() {
     }
     if (websiteUrl.trim()) {
       payload.websiteUrl = websiteUrl.trim();
+    }
+    if (skillTags.length > 0) {
+      payload.skillTags = skillTags;
     }
 
     try {
@@ -167,6 +172,19 @@ export default function PostEventPage() {
             ))}
           </select>
         </label>
+
+        <div className="post-event__field">
+          <span className="post-event__label">Skills needed (optional)</span>
+          <p className="post-event__hint post-event__hint--above">
+            Tag this listing so volunteers with matching skills get recommendations.
+          </p>
+          <SkillTagPicker
+            value={skillTags}
+            onChange={setSkillTags}
+            disabled={submitting}
+            idPrefix="post-skill"
+          />
+        </div>
 
         <label className="post-event__field">
           <span className="post-event__label">Description</span>

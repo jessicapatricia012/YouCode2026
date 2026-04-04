@@ -3,6 +3,7 @@ import Map, { Layer, Marker, NavigationControl, Popup, Source } from 'react-map-
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { geodesicCircleFeature } from '../geo.js';
 import { EVENT_TYPE_COLORS } from '../eventTypes.js';
+import { SKILL_TAGS } from '../skillTags.js';
 
 const token = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
 
@@ -213,6 +214,13 @@ export default function EventMap({
                   >
                     Event website →
                   </a>
+                </p>
+              ) : null}
+              {popupEvent.skillTags?.length > 0 ? (
+                <p className="map-popup__meta map-popup__skill-tags">
+                  {popupEvent.skillTags
+                    .map((id) => SKILL_TAGS.find((t) => t.id === id)?.label ?? id)
+                    .join(' · ')}
                 </p>
               ) : null}
               {!organizerCannotVolunteer ? (

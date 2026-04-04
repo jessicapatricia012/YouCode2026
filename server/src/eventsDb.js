@@ -1,5 +1,6 @@
 import { pool } from '../db.js';
 import { geocodeStreetAndCity } from './geocode.js';
+import { normalizeSkillTags } from './skillTags.js';
 
 const ALLOWED_TYPES = new Set([
   'volunteer',
@@ -18,9 +19,16 @@ export function parseTypesQuery(raw) {
   return parts.length ? parts : null;
 }
 
+/** PostgreSQL undefined_column when `events.skill_tags` was never migrated. */
+function isMissingSkillTagsColumn(err) {
+  return (
+    err?.code === '42703' && /skill_tags/i.test(String(err.message ?? ''))
+  );
+}
+
 function mapRow(row) {
   const spotsLeft = row.spots_total - row.spots_taken;
-  return {
+  const out = {
     id: row.id,
     title: row.title,
     description: row.description,
@@ -29,6 +37,7 @@ function mapRow(row) {
     address: row.address,
     city: row.city ?? null,
     websiteUrl: row.website_url ?? null,
+    skillTags: Array.isArray(row.skill_tags) ? row.skill_tags : [],
     lat: row.lat != null ? Number(row.lat) : null,
     lng: row.lng != null ? Number(row.lng) : null,
     startsAt: row.starts_at,
@@ -37,10 +46,35 @@ function mapRow(row) {
     spotsTotal: row.spots_total,
     spotsTaken: row.spots_taken,
   };
+  if (row.match_count != null && Number.isFinite(Number(row.match_count))) {
+    out.skillMatchCount = Number(row.match_count);
+  }
+  return out;
 }
 
-export async function listEventsFromDb(typesFilter) {
-  let sql = `
+const LIST_EVENTS_SELECT_WITH_TAGS = `
+    SELECT
+      e.id,
+      e.title,
+      e.description,
+      e.type,
+      e.address,
+      e.city,
+      e.website_url,
+      e.starts_at,
+      e.ends_at,
+      e.spots_total,
+      e.spots_taken,
+      e.skill_tags,
+      o.name AS org_name,
+      ST_Y(e.location::geometry) AS lat,
+      ST_X(e.location::geometry) AS lng
+    FROM events e
+    INNER JOIN orgs o ON o.id = e.org_id
+    WHERE e.is_active = true
+`;
+
+const LIST_EVENTS_SELECT_NO_TAGS = `
     SELECT
       e.id,
       e.title,
@@ -59,7 +93,10 @@ export async function listEventsFromDb(typesFilter) {
     FROM events e
     INNER JOIN orgs o ON o.id = e.org_id
     WHERE e.is_active = true
-  `;
+`;
+
+export async function listEventsFromDb(typesFilter) {
+  let sql = LIST_EVENTS_SELECT_WITH_TAGS;
   const params = [];
   if (typesFilter?.length) {
     const allowed = typesFilter.filter((t) => ALLOWED_TYPES.has(t));
@@ -69,13 +106,104 @@ export async function listEventsFromDb(typesFilter) {
     }
   }
   sql += ` ORDER BY e.starts_at ASC`;
-  const { rows } = await pool.query(sql, params);
-  return rows.map(mapRow);
+  try {
+    const { rows } = await pool.query(sql, params);
+    return rows.map(mapRow);
+  } catch (err) {
+    if (!isMissingSkillTagsColumn(err)) throw err;
+    let sqlNo = LIST_EVENTS_SELECT_NO_TAGS;
+    if (typesFilter?.length) {
+      const allowed = typesFilter.filter((t) => ALLOWED_TYPES.has(t));
+      if (allowed.length > 0) {
+        sqlNo += ` AND e.type = ANY($1::event_type[])`;
+      }
+    }
+    sqlNo += ` ORDER BY e.starts_at ASC`;
+    const { rows } = await pool.query(sqlNo, params);
+    return rows.map(mapRow);
+  }
+}
+
+/** Events that overlap the volunteer's profile skills, best matches first. */
+export async function listRecommendedEventsForVolunteer(userId, typesFilter) {
+  const { rows: profRows } = await pool.query(
+    'SELECT skills FROM volunteer_profiles WHERE user_id = $1',
+    [userId]
+  );
+  const profileSkills = normalizeSkillTags(profRows[0]?.skills ?? []);
+  if (profileSkills.length === 0) {
+    return { events: [], needsSkills: true };
+  }
+
+  let sql = `
+    SELECT
+      e.id,
+      e.title,
+      e.description,
+      e.type,
+      e.address,
+      e.city,
+      e.website_url,
+      e.starts_at,
+      e.ends_at,
+      e.spots_total,
+      e.spots_taken,
+      e.skill_tags,
+      o.name AS org_name,
+      ST_Y(e.location::geometry) AS lat,
+      ST_X(e.location::geometry) AS lng,
+      (
+        SELECT COUNT(*)::int
+        FROM (SELECT unnest(e.skill_tags) AS tag) AS st
+        WHERE st.tag = ANY($1::text[])
+      ) AS match_count
+    FROM events e
+    INNER JOIN orgs o ON o.id = e.org_id
+    WHERE e.is_active = true
+      AND e.skill_tags && $1::text[]
+  `;
+  const params = [profileSkills];
+  if (typesFilter?.length) {
+    const allowed = typesFilter.filter((t) => ALLOWED_TYPES.has(t));
+    if (allowed.length > 0) {
+      params.push(allowed);
+      sql += ` AND e.type = ANY($${params.length}::event_type[])`;
+    }
+  }
+  sql += ` ORDER BY match_count DESC, e.starts_at ASC LIMIT 40`;
+  try {
+    const { rows } = await pool.query(sql, params);
+    return { events: rows.map(mapRow), needsSkills: false };
+  } catch (err) {
+    if (!isMissingSkillTagsColumn(err)) throw err;
+    const events = await listEventsFromDb(typesFilter);
+    return { events, needsSkills: false };
+  }
 }
 
 export async function getEventByIdFromDb(id) {
-  const { rows } = await pool.query(
-    `
+  const sqlWith = `
+    SELECT
+      e.id,
+      e.title,
+      e.description,
+      e.type,
+      e.address,
+      e.city,
+      e.website_url,
+      e.starts_at,
+      e.ends_at,
+      e.spots_total,
+      e.spots_taken,
+      e.skill_tags,
+      o.name AS org_name,
+      ST_Y(e.location::geometry) AS lat,
+      ST_X(e.location::geometry) AS lng
+    FROM events e
+    INNER JOIN orgs o ON o.id = e.org_id
+    WHERE e.id = $1 AND e.is_active = true
+  `;
+  const sqlNo = `
     SELECT
       e.id,
       e.title,
@@ -94,16 +222,42 @@ export async function getEventByIdFromDb(id) {
     FROM events e
     INNER JOIN orgs o ON o.id = e.org_id
     WHERE e.id = $1 AND e.is_active = true
-    `,
-    [id]
-  );
-  return rows[0] ? mapRow(rows[0]) : null;
+  `;
+  try {
+    const { rows } = await pool.query(sqlWith, [id]);
+    return rows[0] ? mapRow(rows[0]) : null;
+  } catch (err) {
+    if (!isMissingSkillTagsColumn(err)) throw err;
+    const { rows } = await pool.query(sqlNo, [id]);
+    return rows[0] ? mapRow(rows[0]) : null;
+  }
 }
 
 /** Organizer's event by id (includes inactive). */
 export async function getOrgEventByIdFromDb(eventId, orgId) {
-  const { rows } = await pool.query(
-    `
+  const sqlWith = `
+    SELECT
+      e.id,
+      e.title,
+      e.description,
+      e.type,
+      e.address,
+      e.city,
+      e.website_url,
+      e.starts_at,
+      e.ends_at,
+      e.spots_total,
+      e.spots_taken,
+      e.is_active,
+      e.skill_tags,
+      o.name AS org_name,
+      ST_Y(e.location::geometry) AS lat,
+      ST_X(e.location::geometry) AS lng
+    FROM events e
+    INNER JOIN orgs o ON o.id = e.org_id
+    WHERE e.id = $1 AND e.org_id = $2
+  `;
+  const sqlNo = `
     SELECT
       e.id,
       e.title,
@@ -123,9 +277,14 @@ export async function getOrgEventByIdFromDb(eventId, orgId) {
     FROM events e
     INNER JOIN orgs o ON o.id = e.org_id
     WHERE e.id = $1 AND e.org_id = $2
-    `,
-    [eventId, orgId]
-  );
+  `;
+  let rows;
+  try {
+    ({ rows } = await pool.query(sqlWith, [eventId, orgId]));
+  } catch (err) {
+    if (!isMissingSkillTagsColumn(err)) throw err;
+    ({ rows } = await pool.query(sqlNo, [eventId, orgId]));
+  }
   if (!rows[0]) return null;
   const r = rows[0];
   return { ...mapRow(r), isActive: r.is_active };
@@ -142,6 +301,7 @@ function mapOrgEventRow(row) {
     address: row.address,
     city: row.city ?? null,
     websiteUrl: row.website_url ?? null,
+    skillTags: Array.isArray(row.skill_tags) ? row.skill_tags : [],
     lat: row.lat != null ? Number(row.lat) : null,
     lng: row.lng != null ? Number(row.lng) : null,
     startsAt: row.starts_at,
@@ -156,8 +316,31 @@ function mapOrgEventRow(row) {
 
 /** All events for an org (including inactive), with signup counts */
 export async function listOrgEventsFromDb(orgId) {
-  const { rows } = await pool.query(
-    `
+  const sqlWith = `
+    SELECT
+      e.id,
+      e.title,
+      e.description,
+      e.type,
+      e.address,
+      e.city,
+      e.website_url,
+      e.starts_at,
+      e.ends_at,
+      e.spots_total,
+      e.spots_taken,
+      e.is_active,
+      e.skill_tags,
+      o.name AS org_name,
+      ST_Y(e.location::geometry) AS lat,
+      ST_X(e.location::geometry) AS lng,
+      (SELECT COUNT(*)::int FROM signups s WHERE s.event_id = e.id) AS signup_count
+    FROM events e
+    INNER JOIN orgs o ON o.id = e.org_id
+    WHERE e.org_id = $1
+    ORDER BY e.starts_at DESC
+  `;
+  const sqlNo = `
     SELECT
       e.id,
       e.title,
@@ -179,9 +362,14 @@ export async function listOrgEventsFromDb(orgId) {
     INNER JOIN orgs o ON o.id = e.org_id
     WHERE e.org_id = $1
     ORDER BY e.starts_at DESC
-    `,
-    [orgId]
-  );
+  `;
+  let rows;
+  try {
+    ({ rows } = await pool.query(sqlWith, [orgId]));
+  } catch (err) {
+    if (!isMissingSkillTagsColumn(err)) throw err;
+    ({ rows } = await pool.query(sqlNo, [orgId]));
+  }
   return rows.map(mapOrgEventRow);
 }
 
@@ -267,9 +455,45 @@ export async function createEventForOrg(orgId, body) {
   const websiteUrl = parseOptionalEventWebsiteUrl(
     body?.websiteUrl ?? body?.website_url
   );
+  const skillTags = normalizeSkillTags(body?.skillTags ?? body?.skill_tags);
 
-  const { rows } = await pool.query(
-    `
+  const paramsWithTags = [
+    orgId,
+    title,
+    description,
+    type,
+    address,
+    city,
+    geo.lng,
+    geo.lat,
+    start.toISOString(),
+    endsAtSql,
+    spotsTotal,
+    websiteUrl,
+    skillTags,
+  ];
+  const paramsNoTags = paramsWithTags.slice(0, -1);
+
+  let rows;
+  try {
+    ({ rows } = await pool.query(
+      `
+    INSERT INTO events (
+      org_id, title, description, type, address, city, location,
+      starts_at, ends_at, spots_total, spots_taken, is_active, website_url, skill_tags
+    ) VALUES (
+      $1, $2, $3, $4::event_type, $5, $6,
+      ST_SetSRID(ST_MakePoint($7, $8), 4326)::geography,
+      $9, $10, $11, 0, true, $12, $13
+    )
+    RETURNING id
+    `,
+      paramsWithTags
+    ));
+  } catch (err) {
+    if (!isMissingSkillTagsColumn(err)) throw err;
+    ({ rows } = await pool.query(
+      `
     INSERT INTO events (
       org_id, title, description, type, address, city, location,
       starts_at, ends_at, spots_total, spots_taken, is_active, website_url
@@ -280,21 +504,9 @@ export async function createEventForOrg(orgId, body) {
     )
     RETURNING id
     `,
-    [
-      orgId,
-      title,
-      description,
-      type,
-      address,
-      city,
-      geo.lng,
-      geo.lat,
-      start.toISOString(),
-      endsAtSql,
-      spotsTotal,
-      websiteUrl,
-    ]
-  );
+      paramsNoTags
+    ));
+  }
   const id = rows[0].id;
   return getEventByIdFromDb(id);
 }
@@ -308,16 +520,31 @@ export async function deleteEventByOrg(eventId, orgId) {
 }
 
 export async function updateEventByOrg(eventId, orgId, body) {
-  const { rows: existingRows } = await pool.query(
-    `
+  let existingRows;
+  try {
+    ({ rows: existingRows } = await pool.query(
+      `
+    SELECT address, city, spots_taken, spots_total, website_url, skill_tags,
+      ST_Y(location::geometry) AS lat,
+      ST_X(location::geometry) AS lng
+    FROM events
+    WHERE id = $1 AND org_id = $2
+    `,
+      [eventId, orgId]
+    ));
+  } catch (err) {
+    if (!isMissingSkillTagsColumn(err)) throw err;
+    ({ rows: existingRows } = await pool.query(
+      `
     SELECT address, city, spots_taken, spots_total, website_url,
       ST_Y(location::geometry) AS lat,
       ST_X(location::geometry) AS lng
     FROM events
     WHERE id = $1 AND org_id = $2
     `,
-    [eventId, orgId]
-  );
+      [eventId, orgId]
+    ));
+  }
   if (!existingRows[0]) {
     const e = new Error('Not found');
     e.code = 'not_found';
@@ -395,8 +622,55 @@ export async function updateEventByOrg(eventId, orgId, body) {
       ? parseOptionalEventWebsiteUrl(bodyObj.websiteUrl ?? bodyObj.website_url)
       : ex.website_url;
 
-  await pool.query(
-    `
+  const skillTags =
+    'skillTags' in bodyObj || 'skill_tags' in bodyObj
+      ? normalizeSkillTags(bodyObj.skillTags ?? bodyObj.skill_tags)
+      : Array.isArray(ex.skill_tags)
+        ? ex.skill_tags
+        : [];
+
+  const updateParamsWithTags = [
+    title,
+    description,
+    type,
+    address,
+    city,
+    lng,
+    lat,
+    start.toISOString(),
+    endsAtSql,
+    spotsTotal,
+    websiteUrl,
+    skillTags,
+    eventId,
+    orgId,
+  ];
+  const updateParamsNoTags = updateParamsWithTags.filter(
+    (_, i) => i !== updateParamsWithTags.length - 3
+  );
+  try {
+    await pool.query(
+      `
+    UPDATE events SET
+      title = $1,
+      description = $2,
+      type = $3::event_type,
+      address = $4,
+      city = $5,
+      location = ST_SetSRID(ST_MakePoint($6, $7), 4326)::geography,
+      starts_at = $8,
+      ends_at = $9,
+      spots_total = $10,
+      website_url = $11,
+      skill_tags = $12
+    WHERE id = $13 AND org_id = $14
+    `,
+      updateParamsWithTags
+    );
+  } catch (err) {
+    if (!isMissingSkillTagsColumn(err)) throw err;
+    await pool.query(
+      `
     UPDATE events SET
       title = $1,
       description = $2,
@@ -410,22 +684,9 @@ export async function updateEventByOrg(eventId, orgId, body) {
       website_url = $11
     WHERE id = $12 AND org_id = $13
     `,
-    [
-      title,
-      description,
-      type,
-      address,
-      city,
-      lng,
-      lat,
-      start.toISOString(),
-      endsAtSql,
-      spotsTotal,
-      websiteUrl,
-      eventId,
-      orgId,
-    ]
-  );
+      updateParamsNoTags
+    );
+  }
 
   return getOrgEventByIdFromDb(eventId, orgId);
 }

@@ -1,8 +1,28 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { listRecommendedEventsForVolunteer, parseTypesQuery } from '../src/eventsDb.js';
+import { normalizeSkillTags } from '../src/skillTags.js';
 
 const router = Router();
+
+/** GET /api/volunteer/recommendations — events matching profile skills (visitors only). */
+router.get('/recommendations', requireAuth, async (req, res) => {
+  try {
+    if (req.auth.role !== 'user') {
+      return res.status(403).json({
+        error: 'forbidden',
+        message: 'Only visitors receive skill-based recommendations.',
+      });
+    }
+    const types = parseTypesQuery(req.query.types);
+    const result = await listRecommendedEventsForVolunteer(req.auth.id, types);
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
 
 /** GET /api/volunteer/profile - Get current user's volunteer profile */
 router.get('/profile', requireAuth, async (req, res) => {
@@ -65,9 +85,10 @@ router.put('/profile', requireAuth, async (req, res) => {
       emergencyContactPhone,
     } = req.body;
 
-    // Validate arrays
-    const skillsArr = Array.isArray(skills) ? skills.filter(s => typeof s === 'string' && s.trim()) : [];
-    const interestsArr = Array.isArray(interests) ? interests.filter(i => typeof i === 'string' && i.trim()) : [];
+    const skillsArr = normalizeSkillTags(skills);
+    const interestsArr = Array.isArray(interests)
+      ? interests.filter((i) => typeof i === 'string' && i.trim())
+      : [];
 
     await pool.query(
       `INSERT INTO volunteer_profiles (

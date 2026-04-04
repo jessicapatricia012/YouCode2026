@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import SkillTagPicker from '../components/SkillTagPicker.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { isoToDatetimeLocalValue } from '../datetimeLocal.js';
 import { EVENT_TYPE_LABELS, EVENT_TYPE_ORDER } from '../eventTypes.js';
+import { normalizeSkillTagsClient } from '../skillTags.js';
 import './PostEventPage.css';
 
 export default function EditEventPage() {
@@ -19,6 +21,7 @@ export default function EditEventPage() {
   const [endsAt, setEndsAt] = useState('');
   const [spotsTotal, setSpotsTotal] = useState('');
   const [websiteUrl, setWebsiteUrl] = useState('');
+  const [skillTags, setSkillTags] = useState([]);
 
   const [loadingEvent, setLoadingEvent] = useState(true);
   const [loadError, setLoadError] = useState(null);
@@ -54,6 +57,7 @@ export default function EditEventPage() {
       setEndsAt(isoToDatetimeLocalValue(ev.endsAt));
       setSpotsTotal(String(ev.spotsTotal ?? ''));
       setWebsiteUrl(ev.websiteUrl ?? '');
+      setSkillTags(normalizeSkillTagsClient(ev.skillTags ?? []));
     } catch {
       setLoadError('Could not load this event. Is the API running?');
     } finally {
@@ -118,6 +122,7 @@ export default function EditEventPage() {
       payload.spotsTotal = Number(spotsTotal);
     }
     payload.websiteUrl = websiteUrl.trim();
+    payload.skillTags = skillTags;
 
     try {
       const r = await fetch(`/api/events/${id}`, {
@@ -237,6 +242,19 @@ export default function EditEventPage() {
               disabled={submitting}
             />
           </label>
+
+          <div className="post-event__field">
+            <span className="post-event__label">Skills needed (optional)</span>
+            <p className="post-event__hint post-event__hint--above">
+              Tag this listing so volunteers with matching skills get recommendations.
+            </p>
+            <SkillTagPicker
+              value={skillTags}
+              onChange={setSkillTags}
+              disabled={submitting}
+              idPrefix="edit-skill"
+            />
+          </div>
 
           <label className="post-event__field">
             <span className="post-event__label">Street address</span>

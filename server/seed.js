@@ -154,6 +154,17 @@ async function main() {
     console.log(`  ${o.name} <${o.email}>`);
   }
 
+  const SEED_SKILL_TAGS_ROTATION = [
+    ['food_service', 'events_setup'],
+    ['driving', 'customer_service'],
+    ['outdoor', 'events_setup'],
+    ['first_aid', 'customer_service'],
+    ['childcare', 'elder_care'],
+    ['fundraising', 'writing'],
+    ['technology', 'admin'],
+    ['language', 'customer_service'],
+  ];
+
   console.log('Inserting 20 events (Mapbox when token valid; else built-in coordinates)…');
   let mapboxUsed = 0;
   for (let i = 0; i < EVENT_SEED.length; i++) {
@@ -163,15 +174,16 @@ async function main() {
     const starts = startsAtFromOffset(ev.dayOffset, ev.hour);
     const ends = endsAt(starts);
     const orgId = orgIds[ev.orgIx % orgIds.length];
+    const skillTags = SEED_SKILL_TAGS_ROTATION[i % SEED_SKILL_TAGS_ROTATION.length];
 
     await pool.query(
       `INSERT INTO events (
         org_id, title, description, type, address, city, location,
-        starts_at, ends_at, spots_total, spots_taken, is_active, website_url
+        starts_at, ends_at, spots_total, spots_taken, is_active, website_url, skill_tags
       ) VALUES (
         $1, $2, $3, $4::event_type, $5, $6,
         ST_SetSRID(ST_MakePoint($7, $8), 4326)::geography,
-        $9, $10, $11, 0, true, NULL
+        $9, $10, $11, 0, true, NULL, $12
       )`,
       [
         orgId,
@@ -185,6 +197,7 @@ async function main() {
         starts.toISOString(),
         ends.toISOString(),
         ev.spots,
+        skillTags,
       ]
     );
     console.log(`  [${i + 1}/20] ${ev.title} (${source})`);

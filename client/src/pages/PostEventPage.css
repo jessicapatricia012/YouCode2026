@@ -108,6 +108,11 @@
   line-height: 1.35;
 }
 
+.post-event__hint--above {
+  display: block;
+  margin: 0 0 0.5rem;
+}
+
 .post-event__input,
 .post-event__textarea {
   font-family: inherit;

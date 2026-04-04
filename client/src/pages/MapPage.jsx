@@ -160,6 +160,8 @@ export default function MapPage() {
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
+        /* Forbidden (e.g. organizer signup): never pop a dialog — UI already hides the button. */
+        if (r.status === 403) return;
         const msg =
           data.error === 'full'
             ? 'This event is full.'
@@ -167,9 +169,7 @@ export default function MapPage() {
               ? 'Event not found.'
               : r.status === 401
                 ? 'Please sign in again.'
-                : r.status === 403
-                  ? data.message || 'Signup not available for this account.'
-                  : 'Signup failed.';
+                : 'Signup failed.';
         window.alert(msg);
         return;
       }
