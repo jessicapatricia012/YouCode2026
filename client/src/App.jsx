@@ -1,29 +1,113 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import EventMap from './components/EventMap.jsx';
+import FilterSidebar from './components/FilterSidebar.jsx';
+import { EVENT_TYPE_ORDER } from './eventTypes.js';
+import './App.css';
+
+function typesQuery(includedTypes) {
+  const all =
+    includedTypes.length === EVENT_TYPE_ORDER.length &&
+    EVENT_TYPE_ORDER.every((t) => includedTypes.includes(t));
+  if (all) return '';
+  if (includedTypes.length === 0) return null;
+  return `?types=${includedTypes.map(encodeURIComponent).join(',')}`;
+}
 
 export default function App() {
-  const [ping, setPing] = useState(null);
+  const [includedTypes, setIncludedTypes] = useState(() => [...EVENT_TYPE_ORDER]);
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const queryKey = useMemo(() => {
+    const q = typesQuery(includedTypes);
+    if (q === null) return 'none';
+    return q || 'all';
+  }, [includedTypes]);
+
   useEffect(() => {
-    fetch('/api/ping')
-      .then((r) => r.json())
-      .then(setPing)
-      .catch(() => setError('Could not reach API. Is the server running on port 3001?'));
+    if (queryKey === 'none') {
+      setEvents([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    const path = queryKey === 'all' ? '/api/events' : `/api/events${queryKey}`;
+
+    fetch(path)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        if (!cancelled) setEvents(data.events ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError('Could not load events. Is the API running on port 3001?');
+          setEvents([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [queryKey]);
+
+  const onToggleType = useCallback((type) => {
+    setIncludedTypes((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
+  }, []);
+
+  const onSelectAll = useCallback(() => {
+    setIncludedTypes([...EVENT_TYPE_ORDER]);
+  }, []);
+
+  const onSignup = useCallback(async (ev) => {
+    const r = await fetch(`/api/events/${ev.id}/signups`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const msg =
+        data.error === 'full'
+          ? 'This event is full.'
+          : r.status === 404
+            ? 'Event not found.'
+            : 'Signup failed.';
+      window.alert(msg);
+      return;
+    }
+    setEvents((prev) =>
+      prev.map((e) =>
+        e.id === ev.id ? { ...e, spotsLeft: data.spotsLeft } : e
+      )
+    );
   }, []);
 
   return (
-    <main style={{ padding: '2rem', fontFamily: 'system-ui, sans-serif' }}>
-      <h1>BC Nonprofit Events</h1>
-      <p>Monorepo scaffold: Vite client + Express API.</p>
-      <section>
-        <h2>GET /api/ping</h2>
-        {error && <p style={{ color: 'crimson' }}>{error}</p>}
-        {ping && (
-          <pre style={{ background: '#f4f4f5', padding: '1rem', borderRadius: 8 }}>
-            {JSON.stringify(ping, null, 2)}
-          </pre>
-        )}
-      </section>
-    </main>
+    <div className="app">
+      <FilterSidebar
+        includedTypes={includedTypes}
+        onToggleType={onToggleType}
+        onSelectAll={onSelectAll}
+      />
+      <EventMap
+        events={events}
+        loading={loading}
+        error={error}
+        onSignup={onSignup}
+      />
+    </div>
   );
 }
