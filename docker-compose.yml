@@ -1,0 +1,18 @@
+# Local PostgreSQL + PostGIS (matches default DATABASE_URL in server/.env.example)
+# From repo root: docker compose up -d
+# Then run migrations, then: npm run seed -w server
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: commonground
+    volumes:
+      - connectbc_pgdata:/var/lib/postgresql/data
+
+volumes:
+  connectbc_pgdata:

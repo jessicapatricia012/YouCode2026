@@ -1,13 +1,15 @@
 /**
- * Seed orgs + events (Mapbox geocoding for coordinates).
- * Run from server directory: npm run seed
- * Requires: DATABASE_URL, MAPBOX_TOKEN, migration applied.
+ * Seed orgs + events.
+ * Run: npm run seed (from server/) or npm run seed from repo root.
+ * DATABASE_URL + migrations required. MAPBOX_TOKEN optional: if missing or invalid,
+ * each row uses built-in lat/lng so pins always load.
  */
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { pool } from './db.js';
 
 const MAPBOX_TOKEN = process.env.MAPBOX_TOKEN;
+let mapboxWarned = false;
 const PASSWORD = 'password123';
 const BCRYPT_ROUNDS = 10;
 
@@ -50,47 +52,57 @@ const ORGS = [
   },
 ];
 
-/** orgIndex 0–4, dayOffset from today, hour local */
+/** orgIndex 0–4; lat/lng = WGS84 fallback if Mapbox is skipped or fails */
 const EVENT_SEED = [
-  { orgIx: 0, type: 'volunteer', title: 'Weekend food sort — morning shift', description: 'Sort donations and pack hampers.', address: '8345 Winston St, Burnaby, BC V5A 2H5', dayOffset: 2, hour: 9, spots: 8 },
-  { orgIx: 1, type: 'community', title: 'Community garden spring planting', description: 'Help plant seedlings for the season.', address: '298 East 11th Ave, Vancouver, BC V5T 2C3', dayOffset: 5, hour: 10, spots: 15 },
-  { orgIx: 2, type: 'donation_drive', title: 'Winter coat & blanket drive', description: 'Drop off gently used coats at the door.', address: '101 West Cordova St, Vancouver, BC V6B 1E1', dayOffset: 1, hour: 11, spots: 40 },
-  { orgIx: 1, type: 'job', title: 'Grant writer (contract, hybrid)', description: 'Part-time grant writing support.', address: '4545 Canada Way, Burnaby, BC V5G 4T9', dayOffset: 10, hour: 9, spots: 1 },
-  { orgIx: 2, type: 'fundraiser', title: 'Gala auction — setup crew', description: 'Assist with auction setup and guest flow.', address: '938 West 28th Ave, Vancouver, BC V5Z 4H4', dayOffset: 14, hour: 16, spots: 12 },
-  { orgIx: 0, type: 'volunteer', title: 'Neighbourhood cleanup — Trout Lake', description: 'Litter pickup and sorting.', address: '3360 Victoria Dr, Vancouver, BC V5N 4M4', dayOffset: 7, hour: 9, spots: 25 },
-  { orgIx: 1, type: 'community', title: 'Newcomer welcome picnic', description: 'Welcome families and share resources.', address: '2610 Victoria Dr, Vancouver, BC V5N 4L2', dayOffset: 18, hour: 12, spots: 60 },
-  { orgIx: 3, type: 'donation_drive', title: 'School supply drive — Metrotown', description: 'Backpack and supply collection.', address: '4700 Kingsway, Burnaby, BC V5H 4M2', dayOffset: 12, hour: 10, spots: 200 },
-  { orgIx: 1, type: 'job', title: 'Fundraising coordinator (part-time)', description: 'Support campaign logistics.', address: '909 Main St, Vancouver, BC V6A 2W1', dayOffset: 8, hour: 8, spots: 2 },
-  { orgIx: 2, type: 'volunteer', title: 'Charity run water station', description: 'Hand out water and cheer runners.', address: '595 West 8th Ave, Vancouver, BC V5Z 1C6', dayOffset: 22, hour: 7, spots: 30 },
-  { orgIx: 0, type: 'community', title: 'Seniors tech help drop-in', description: 'One-on-one device help.', address: '4908 Hastings St, Burnaby, BC V5B 1R6', dayOffset: 4, hour: 13, spots: 6 },
-  { orgIx: 2, type: 'fundraiser', title: 'Spring plant sale', description: 'Annual fundraising plant sale.', address: '4600 Cambie St, Vancouver, BC V5Z 2Z1', dayOffset: 20, hour: 10, spots: 500 },
-  { orgIx: 1, type: 'volunteer', title: 'Blood donor clinic greeter', description: 'Welcome donors and direct flow.', address: '4750 Oak St, Vancouver, BC V6H 2N9', dayOffset: 3, hour: 8, spots: 4 },
-  { orgIx: 0, type: 'donation_drive', title: 'Diaper & formula collection', description: 'Essentials for families in need.', address: '1830 Pandora St, Vancouver, BC V5L 1M8', dayOffset: 9, hour: 9, spots: 0 },
-  { orgIx: 1, type: 'job', title: 'Youth program facilitator', description: 'After-school programming support.', address: '4338 Hastings St, Burnaby, BC V5C 2J9', dayOffset: 11, hour: 9, spots: 3 },
-  { orgIx: 3, type: 'community', title: 'Downtown community breakfast', description: 'Serve breakfast and connect with guests.', address: '919 Pandora Ave, Victoria, BC V8W 1N6', dayOffset: 6, hour: 7, spots: 10 },
-  { orgIx: 3, type: 'volunteer', title: 'Shoreline restoration — Beacon Hill', description: 'Native planting along the shore.', address: '100 Cook St, Victoria, BC V8V 3W8', dayOffset: 15, hour: 10, spots: 18 },
-  { orgIx: 2, type: 'fundraiser', title: 'Heritage hall trivia night', description: 'Trivia fundraiser for housing programs.', address: '1415 Broad St, Victoria, BC V8W 2B2', dayOffset: 25, hour: 18, spots: 80 },
-  { orgIx: 4, type: 'volunteer', title: 'Food bank hamper packing', description: 'Pack weekly hampers for families.', address: '201 Beaver Lake Rd, Kelowna, BC V1Y 6T4', dayOffset: 5, hour: 13, spots: 14 },
-  { orgIx: 4, type: 'community', title: 'Earth Day community fair', description: 'Booths, kids’ activities, and watershed info.', address: '1360 Water St, Kelowna, BC V1Y 9P3', dayOffset: 28, hour: 11, spots: 120 },
+  { orgIx: 0, type: 'volunteer', title: 'Weekend food sort — morning shift', description: 'Sort donations and pack hampers.', address: '8345 Winston St, Burnaby, BC V5A 2H5', lat: 49.2561, lng: -122.9664, dayOffset: 2, hour: 9, spots: 8 },
+  { orgIx: 1, type: 'community', title: 'Community garden spring planting', description: 'Help plant seedlings for the season.', address: '298 East 11th Ave, Vancouver, BC V5T 2C3', lat: 49.2612, lng: -123.1014, dayOffset: 5, hour: 10, spots: 15 },
+  { orgIx: 2, type: 'donation_drive', title: 'Winter coat & blanket drive', description: 'Drop off gently used coats at the door.', address: '101 West Cordova St, Vancouver, BC V6B 1E1', lat: 49.2839, lng: -123.1065, dayOffset: 1, hour: 11, spots: 40 },
+  { orgIx: 1, type: 'job', title: 'Grant writer (contract, hybrid)', description: 'Part-time grant writing support.', address: '4545 Canada Way, Burnaby, BC V5G 4T9', lat: 49.2387, lng: -123.0036, dayOffset: 10, hour: 9, spots: 1 },
+  { orgIx: 2, type: 'fundraiser', title: 'Gala auction — setup crew', description: 'Assist with auction setup and guest flow.', address: '938 West 28th Ave, Vancouver, BC V5Z 4H4', lat: 49.2473, lng: -123.1216, dayOffset: 14, hour: 16, spots: 12 },
+  { orgIx: 0, type: 'volunteer', title: 'Neighbourhood cleanup — Trout Lake', description: 'Litter pickup and sorting.', address: '3360 Victoria Dr, Vancouver, BC V5N 4M4', lat: 49.255, lng: -123.0656, dayOffset: 7, hour: 9, spots: 25 },
+  { orgIx: 1, type: 'community', title: 'Newcomer welcome picnic', description: 'Welcome families and share resources.', address: '2610 Victoria Dr, Vancouver, BC V5N 4L2', lat: 49.2615, lng: -123.0698, dayOffset: 18, hour: 12, spots: 60 },
+  { orgIx: 3, type: 'donation_drive', title: 'School supply drive — Metrotown', description: 'Backpack and supply collection.', address: '4700 Kingsway, Burnaby, BC V5H 4M2', lat: 49.2256, lng: -123.0031, dayOffset: 12, hour: 10, spots: 200 },
+  { orgIx: 1, type: 'job', title: 'Fundraising coordinator (part-time)', description: 'Support campaign logistics.', address: '909 Main St, Vancouver, BC V6A 2W1', lat: 49.2789, lng: -123.0994, dayOffset: 8, hour: 8, spots: 2 },
+  { orgIx: 2, type: 'volunteer', title: 'Charity run water station', description: 'Hand out water and cheer runners.', address: '595 West 8th Ave, Vancouver, BC V5Z 1C6', lat: 49.2634, lng: -123.1241, dayOffset: 22, hour: 7, spots: 30 },
+  { orgIx: 0, type: 'community', title: 'Seniors tech help drop-in', description: 'One-on-one device help.', address: '4908 Hastings St, Burnaby, BC V5B 1R6', lat: 49.2808, lng: -123.0236, dayOffset: 4, hour: 13, spots: 6 },
+  { orgIx: 2, type: 'fundraiser', title: 'Spring plant sale', description: 'Annual fundraising plant sale.', address: '4600 Cambie St, Vancouver, BC V5Z 2Z1', lat: 49.2415, lng: -123.1168, dayOffset: 20, hour: 10, spots: 500 },
+  { orgIx: 1, type: 'volunteer', title: 'Blood donor clinic greeter', description: 'Welcome donors and direct flow.', address: '4750 Oak St, Vancouver, BC V6H 2N9', lat: 49.2451, lng: -123.1287, dayOffset: 3, hour: 8, spots: 4 },
+  { orgIx: 0, type: 'donation_drive', title: 'Diaper & formula collection', description: 'Essentials for families in need.', address: '1830 Pandora St, Vancouver, BC V5L 1M8', lat: 49.2812, lng: -123.0678, dayOffset: 9, hour: 9, spots: 0 },
+  { orgIx: 1, type: 'job', title: 'Youth program facilitator', description: 'After-school programming support.', address: '4338 Hastings St, Burnaby, BC V5C 2J9', lat: 49.2811, lng: -123.0115, dayOffset: 11, hour: 9, spots: 3 },
+  { orgIx: 3, type: 'community', title: 'Downtown community breakfast', description: 'Serve breakfast and connect with guests.', address: '919 Pandora Ave, Victoria, BC V8W 1N6', lat: 48.4263, lng: -123.3581, dayOffset: 6, hour: 7, spots: 10 },
+  { orgIx: 3, type: 'volunteer', title: 'Shoreline restoration — Beacon Hill', description: 'Native planting along the shore.', address: '100 Cook St, Victoria, BC V8V 3W8', lat: 48.4112, lng: -123.3514, dayOffset: 15, hour: 10, spots: 18 },
+  { orgIx: 2, type: 'fundraiser', title: 'Heritage hall trivia night', description: 'Trivia fundraiser for housing programs.', address: '1415 Broad St, Victoria, BC V8W 2B2', lat: 48.428, lng: -123.3651, dayOffset: 25, hour: 18, spots: 80 },
+  { orgIx: 4, type: 'volunteer', title: 'Food bank hamper packing', description: 'Pack weekly hampers for families.', address: '201 Beaver Lake Rd, Kelowna, BC V1Y 6T4', lat: 49.8956, lng: -119.4946, dayOffset: 5, hour: 13, spots: 14 },
+  { orgIx: 4, type: 'community', title: 'Earth Day community fair', description: 'Booths, kids’ activities, and watershed info.', address: '1360 Water St, Kelowna, BC V1Y 9P3', lat: 49.8918, lng: -119.496, dayOffset: 28, hour: 11, spots: 120 },
 ];
 
-async function geocode(address) {
-  if (!MAPBOX_TOKEN || MAPBOX_TOKEN === 'your_token_here') {
-    throw new Error('Set MAPBOX_TOKEN in server/.env to a valid Mapbox secret token for geocoding.');
+async function resolveCoords(ev) {
+  const fallback = { lng: ev.lng, lat: ev.lat };
+  const token = MAPBOX_TOKEN?.trim();
+  if (!token || token === 'your_token_here') {
+    return { ...fallback, source: 'fallback' };
   }
-  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?limit=1&access_token=${MAPBOX_TOKEN}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Mapbox geocoding failed (${res.status}): ${text.slice(0, 200)}`);
+  try {
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(ev.address)}.json?limit=1&access_token=${token}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`${res.status}: ${text.slice(0, 120)}`);
+    }
+    const data = await res.json();
+    const feature = data.features?.[0];
+    if (!feature?.center) throw new Error('no features');
+    const [lng, lat] = feature.center;
+    return { lng, lat, source: 'mapbox' };
+  } catch (err) {
+    if (!mapboxWarned) {
+      console.warn(
+        `Mapbox geocoding failed (${err.message}). Using built-in coordinates for all events.`
+      );
+      mapboxWarned = true;
+    }
+    return { ...fallback, source: 'fallback' };
   }
-  const data = await res.json();
-  const feature = data.features?.[0];
-  if (!feature?.center) {
-    throw new Error(`No coordinates for: ${address}`);
-  }
-  const [lng, lat] = feature.center;
-  return { lng, lat };
 }
 
 function startsAtFromOffset(dayOffset, hour) {
@@ -107,6 +119,11 @@ function endsAt(start) {
 }
 
 async function main() {
+  if (!process.env.DATABASE_URL) {
+    console.error('DATABASE_URL is missing. Set it in server/.env (see server/.env.example).');
+    process.exit(1);
+  }
+
   console.log('Truncating existing data…');
   await pool.query('TRUNCATE TABLE orgs CASCADE');
   await pool.query('TRUNCATE TABLE users CASCADE');
@@ -135,10 +152,12 @@ async function main() {
     console.log(`  ${o.name} <${o.email}>`);
   }
 
-  console.log('Geocoding and inserting 20 events…');
+  console.log('Inserting 20 events (Mapbox when token valid; else built-in coordinates)…');
+  let mapboxUsed = 0;
   for (let i = 0; i < EVENT_SEED.length; i++) {
     const ev = EVENT_SEED[i];
-    const { lng, lat } = await geocode(ev.address);
+    const { lng, lat, source } = await resolveCoords(ev);
+    if (source === 'mapbox') mapboxUsed += 1;
     const starts = startsAtFromOffset(ev.dayOffset, ev.hour);
     const ends = endsAt(starts);
     const orgId = orgIds[ev.orgIx % orgIds.length];
@@ -165,8 +184,11 @@ async function main() {
         ev.spots,
       ]
     );
-    console.log(`  [${i + 1}/20] ${ev.title}`);
-    await new Promise((r) => setTimeout(r, 110));
+    console.log(`  [${i + 1}/20] ${ev.title} (${source})`);
+    if (source === 'mapbox') await new Promise((r) => setTimeout(r, 110));
+  }
+  if (mapboxUsed === 0) {
+    console.log('(No Mapbox geocodes used — set MAPBOX_TOKEN for live geocoding next time.)');
   }
 
   console.log('Done.');
@@ -174,6 +196,20 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err);
+  const refused =
+    err?.code === 'ECONNREFUSED' ||
+    err?.cause?.code === 'ECONNREFUSED' ||
+    (Array.isArray(err?.errors) && err.errors.some((e) => e.code === 'ECONNREFUSED'));
+  if (refused) {
+    console.error(
+      '\nCould not connect to PostgreSQL (connection refused).\n\n' +
+        'Start a database on the host/port in DATABASE_URL, for example from the repo root:\n' +
+        '  docker compose up -d\n\n' +
+        'Then apply migrations (server/migrations/*.sql) and run seed again.\n' +
+        '(MAPBOX_TOKEN is optional; seed uses fallback coordinates without it.)\n'
+    );
+  } else {
+    console.error(err);
+  }
   process.exit(1);
 });
