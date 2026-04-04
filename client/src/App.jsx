@@ -10,6 +10,7 @@ import LoginPage from './pages/LoginPage.jsx';
 import RegisterPage from './pages/RegisterPage.jsx';
 import MapPage from './pages/MapPage.jsx';
 import OrganizerPage from './pages/OrganizerPage.jsx';
+import VisitorPage from './pages/VisitorPage.jsx';
 import './App.css';
 
 function ProtectedRoute({ children }) {
@@ -51,6 +52,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <OrganizerPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/visitor"
+        element={
+          <ProtectedRoute>
+            <VisitorPage />
           </ProtectedRoute>
         }
       />

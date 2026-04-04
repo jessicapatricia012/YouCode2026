@@ -6,7 +6,7 @@ import './LoginPage.css';
 function destinationAfterAuth(fromState, role) {
   const from = fromState?.from?.pathname;
   if (from && from !== '/login' && from !== '/register') return from;
-  return role === 'organizer' ? '/organize' : '/';
+  return role === 'organizer' ? '/organize' : '/visitor';
 }
 
 export default function LoginPage() {

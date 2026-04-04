@@ -41,6 +41,11 @@ export default function FilterSidebar({
                 Manage listings
               </Link>
             )}
+            {userRole === 'user' && (
+              <Link to="/visitor" className="sidebar__profile-link">
+                My Volunteer Profile
+              </Link>
+            )}
             {onLogout && (
               <button
                 type="button"

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import authRouter from '../routes/auth.js';
+import volunteerRouter from '../routes/volunteer.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import {
   listEventsFromDb,
@@ -27,6 +28,8 @@ app.get('/api/ping', (_req, res) => {
 });
 
 app.use('/api/auth', authRouter);
+
+app.use('/api/volunteer', volunteerRouter);
 
 app.get('/api/events', requireAuth, async (req, res) => {
   try {

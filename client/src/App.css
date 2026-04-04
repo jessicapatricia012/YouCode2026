@@ -75,6 +75,24 @@
   background: var(--connectbc-brand-hover);
 }
 
+.sidebar__profile-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #fff;
+  background: #10b981;
+  border-radius: 6px;
+  text-decoration: none;
+  align-self: flex-start;
+}
+
+.sidebar__profile-link:hover {
+  background: #059669;
+}
+
 .sidebar__logout {
   align-self: flex-start;
   padding: 0.35rem 0.65rem;
