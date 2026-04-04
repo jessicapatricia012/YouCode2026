@@ -12,6 +12,7 @@ import MapPage from './pages/MapPage.jsx';
 import OrgDashboard from './pages/OrgDashboard.jsx';
 import PostEventPage from './pages/PostEventPage.jsx';
 import EditEventPage from './pages/EditEventPage.jsx';
+import VisitorPage from './pages/VisitorPage.jsx';
 import './App.css';
 
 function ProtectedRoute({ children }) {
@@ -91,6 +92,14 @@ function AppRoutes() {
             <OrganizerOnly>
               <EditEventPage />
             </OrganizerOnly>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/visitor"
+        element={
+          <ProtectedRoute>
+            <VisitorPage />
           </ProtectedRoute>
         }
       />
