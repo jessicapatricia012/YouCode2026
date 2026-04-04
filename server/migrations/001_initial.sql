@@ -1,4 +1,4 @@
--- ConnectBC / Common Ground — initial schema (PostgreSQL + PostGIS)
+-- ConnectBC — initial schema (PostgreSQL + PostGIS)
 -- Run: psql "$DATABASE_URL" -f migrations/001_initial.sql
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

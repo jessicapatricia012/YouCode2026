@@ -10,7 +10,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: commonground
+      POSTGRES_DB: connectbc
     volumes:
       - connectbc_pgdata:/var/lib/postgresql/data
 
