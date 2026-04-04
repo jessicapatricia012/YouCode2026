@@ -1,5 +1,5 @@
 {
-  "name": "bc-events-platform",
+  "name": "connectbc",
   "private": true,
   "workspaces": [
     "client",

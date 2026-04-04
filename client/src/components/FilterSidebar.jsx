@@ -4,12 +4,42 @@ import {
   EVENT_TYPE_LABELS,
 } from '../eventTypes.js';
 
-export default function FilterSidebar({ includedTypes, onToggleType, onSelectAll }) {
+export default function FilterSidebar({
+  includedTypes,
+  onToggleType,
+  onSelectAll,
+  userEmail,
+  userRole,
+  onLogout,
+}) {
   return (
     <aside className="sidebar">
       <header className="sidebar__header">
-        <h1 className="sidebar__title">BC nonprofit map</h1>
-        <p className="sidebar__subtitle">Filter by event type</p>
+        <h1 className="sidebar__title">ConnectBC</h1>
+        <p className="sidebar__subtitle">Nonprofit events across BC · filter by type</p>
+        {userEmail && (
+          <div className="sidebar__account">
+            {userRole && (
+              <span
+                className={`sidebar__role-badge sidebar__role-badge--${userRole}`}
+              >
+                {userRole === 'organizer' ? 'Organizer' : 'Visitor'}
+              </span>
+            )}
+            <span className="sidebar__email" title={userEmail}>
+              {userEmail}
+            </span>
+            {onLogout && (
+              <button
+                type="button"
+                className="sidebar__logout"
+                onClick={() => onLogout()}
+              >
+                Log out
+              </button>
+            )}
+          </div>
+        )}
       </header>
       <div className="sidebar__filters">
         {EVENT_TYPE_ORDER.map((type) => {

@@ -8,7 +8,7 @@ export const EVENT_TYPE_ORDER = [
 
 /** Pin colours by type (product spec) */
 export const EVENT_TYPE_COLORS = {
-  volunteer: '#378ADD',
+  volunteer: '#214BB2',
   community: '#1D9E75',
   donation_drive: '#D85A30',
   job: '#7F77DD',

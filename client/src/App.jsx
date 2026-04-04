@@ -1,113 +1,61 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import EventMap from './components/EventMap.jsx';
-import FilterSidebar from './components/FilterSidebar.jsx';
-import { EVENT_TYPE_ORDER } from './eventTypes.js';
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext.jsx';
+import LoginPage from './pages/LoginPage.jsx';
+import RegisterPage from './pages/RegisterPage.jsx';
+import MapPage from './pages/MapPage.jsx';
 import './App.css';
 
-function typesQuery(includedTypes) {
-  const all =
-    includedTypes.length === EVENT_TYPE_ORDER.length &&
-    EVENT_TYPE_ORDER.every((t) => includedTypes.includes(t));
-  if (all) return '';
-  if (includedTypes.length === 0) return null;
-  return `?types=${includedTypes.map(encodeURIComponent).join(',')}`;
+function ProtectedRoute({ children }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+
+  if (loading) {
+    return (
+      <div className="auth-boot">
+        <p>Checking session…</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Navigate to="/login" replace state={{ from: location }} />
+    );
+  }
+
+  return children;
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <MapPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
 }
 
 export default function App() {
-  const [includedTypes, setIncludedTypes] = useState(() => [...EVENT_TYPE_ORDER]);
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const queryKey = useMemo(() => {
-    const q = typesQuery(includedTypes);
-    if (q === null) return 'none';
-    return q || 'all';
-  }, [includedTypes]);
-
-  useEffect(() => {
-    if (queryKey === 'none') {
-      setEvents([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    const path = queryKey === 'all' ? '/api/events' : `/api/events${queryKey}`;
-
-    fetch(path)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((data) => {
-        if (!cancelled) setEvents(data.events ?? []);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setError('Could not load events. Is the API running on port 3001?');
-          setEvents([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [queryKey]);
-
-  const onToggleType = useCallback((type) => {
-    setIncludedTypes((prev) =>
-      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
-    );
-  }, []);
-
-  const onSelectAll = useCallback(() => {
-    setIncludedTypes([...EVENT_TYPE_ORDER]);
-  }, []);
-
-  const onSignup = useCallback(async (ev) => {
-    const r = await fetch(`/api/events/${ev.id}/signups`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      const msg =
-        data.error === 'full'
-          ? 'This event is full.'
-          : r.status === 404
-            ? 'Event not found.'
-            : 'Signup failed.';
-      window.alert(msg);
-      return;
-    }
-    setEvents((prev) =>
-      prev.map((e) =>
-        e.id === ev.id ? { ...e, spotsLeft: data.spotsLeft } : e
-      )
-    );
-  }, []);
-
   return (
-    <div className="app">
-      <FilterSidebar
-        includedTypes={includedTypes}
-        onToggleType={onToggleType}
-        onSelectAll={onSelectAll}
-      />
-      <EventMap
-        events={events}
-        loading={loading}
-        error={error}
-        onSignup={onSignup}
-      />
-    </div>
+    <BrowserRouter>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
