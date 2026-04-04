@@ -7,7 +7,7 @@ export default function RegisterPage() {
   const { user, loading, register } = useAuth();
   const navigate = useNavigate();
 
-  const [role, setRole] = useState('user');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -35,7 +35,7 @@ export default function RegisterPage() {
     }
     setSubmitting(true);
     try {
-      await register(email, password, role);
+      await register(name, email, password);
       navigate('/', { replace: true });
     } catch (err) {
       setFormError(err.message || 'Something went wrong.');
@@ -50,30 +50,24 @@ export default function RegisterPage() {
         <header className="login-card__header">
           <h1 className="login-card__title">Create account</h1>
           <p className="login-card__subtitle">
-            Join ConnectBC as a visitor or organizer. You’ll be signed in right away.
+            Register your nonprofit organization on ConnectBC. You’ll be signed in right
+            away.
           </p>
         </header>
 
-        <div className="login-role" role="group" aria-label="Account type">
-          <button
-            type="button"
-            className={`login-role__btn ${role === 'user' ? 'login-role__btn--active' : ''}`}
-            onClick={() => setRole('user')}
-          >
-            Visitor
-            <span className="login-role__hint">Browse &amp; sign up</span>
-          </button>
-          <button
-            type="button"
-            className={`login-role__btn ${role === 'organizer' ? 'login-role__btn--active' : ''}`}
-            onClick={() => setRole('organizer')}
-          >
-            Organizer
-            <span className="login-role__hint">Post opportunities</span>
-          </button>
-        </div>
-
         <form className="login-form" onSubmit={handleSubmit}>
+          <label className="login-field">
+            <span className="login-field__label">Organization name</span>
+            <input
+              type="text"
+              name="name"
+              autoComplete="organization"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              placeholder="Your nonprofit name"
+            />
+          </label>
           <label className="login-field">
             <span className="login-field__label">Email</span>
             <input
@@ -83,11 +77,7 @@ export default function RegisterPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder={
-                role === 'organizer'
-                  ? 'organizer@yournonprofit.org'
-                  : 'you@email.com'
-              }
+              placeholder="contact@yournonprofit.org"
             />
           </label>
           <label className="login-field">

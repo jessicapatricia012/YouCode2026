@@ -7,22 +7,44 @@ import {
   useState,
 } from 'react';
 
+const TOKEN_KEY = 'connectbc_token';
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
+  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const getAuthHeader = useCallback(() => {
+    if (!token) return {};
+    return { Authorization: `Bearer ${token}` };
+  }, [token]);
+
   const refresh = useCallback(async () => {
+    const stored = localStorage.getItem(TOKEN_KEY);
+    if (!stored) {
+      setToken(null);
+      setUser(null);
+      setLoading(false);
+      return;
+    }
     try {
-      const r = await fetch('/api/auth/me', { credentials: 'include' });
+      const r = await fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${stored}` },
+      });
       if (r.ok) {
         const data = await r.json();
-        setUser(data.user);
+        setToken(stored);
+        setUser(data.org);
       } else {
+        localStorage.removeItem(TOKEN_KEY);
+        setToken(null);
         setUser(null);
       }
     } catch {
+      localStorage.removeItem(TOKEN_KEY);
+      setToken(null);
       setUser(null);
     } finally {
       setLoading(false);
@@ -33,66 +55,66 @@ export function AuthProvider({ children }) {
     refresh();
   }, [refresh]);
 
-  const login = useCallback(async (email, password, role) => {
+  const login = useCallback(async (email, password) => {
     const r = await fetch('/api/auth/login', {
       method: 'POST',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, role }),
+      body: JSON.stringify({ email, password }),
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
-      let msg = 'Login failed.';
-      if (data.error === 'invalid_credentials') {
-        msg = 'Invalid email or password.';
-      } else if (data.error === 'wrong_role') {
-        msg =
-          data.actualRole === 'organizer'
-            ? 'That account is an organizer. Switch to “Organizer” above.'
-            : 'That account is a visitor. Switch to “Visitor” above.';
-      } else if (data.error === 'invalid_role') {
-        msg = 'Choose whether you are signing in as a visitor or an organizer.';
-      }
+      const msg =
+        data.message ||
+        (data.error === 'invalid_credentials'
+          ? 'Invalid email or password.'
+          : 'Login failed.');
       throw new Error(msg);
     }
-    setUser(data.user);
+    localStorage.setItem(TOKEN_KEY, data.token);
+    setToken(data.token);
+    setUser(data.org);
   }, []);
 
-  const register = useCallback(async (email, password, role) => {
+  const register = useCallback(async (name, email, password) => {
     const r = await fetch('/api/auth/register', {
       method: 'POST',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, role }),
+      body: JSON.stringify({ name, email, password }),
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
-      let msg = 'Could not create account.';
-      if (data.error === 'email_taken') {
-        msg = 'An account with this email already exists. Sign in instead.';
-      } else if (data.error === 'weak_password') {
-        msg = `Use at least 8 characters for your password.`;
-      } else if (data.error === 'invalid_email') {
-        msg = 'Enter a valid email address.';
-      } else if (data.error === 'invalid_role') {
-        msg = 'Choose visitor or organizer.';
-      }
+      const msg =
+        data.message ||
+        (data.error === 'email_taken'
+          ? 'An account with this email already exists.'
+          : data.error === 'weak_password'
+            ? 'Use at least 8 characters for your password.'
+            : 'Could not create account.');
       throw new Error(msg);
     }
-    setUser(data.user);
+    localStorage.setItem(TOKEN_KEY, data.token);
+    setToken(data.token);
+    setUser(data.org);
   }, []);
 
-  const logout = useCallback(async () => {
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'include',
-    });
+  const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY);
+    setToken(null);
     setUser(null);
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, login, register, logout, refresh }),
-    [user, loading, login, register, logout, refresh]
+    () => ({
+      user,
+      loading,
+      token,
+      login,
+      register,
+      logout,
+      refresh,
+      getAuthHeader,
+    }),
+    [user, loading, token, login, register, logout, refresh, getAuthHeader]
   );
 
   return (

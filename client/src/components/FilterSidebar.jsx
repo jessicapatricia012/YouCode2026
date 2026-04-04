@@ -8,8 +8,8 @@ export default function FilterSidebar({
   includedTypes,
   onToggleType,
   onSelectAll,
+  orgName,
   userEmail,
-  userRole,
   onLogout,
 }) {
   return (
@@ -19,11 +19,9 @@ export default function FilterSidebar({
         <p className="sidebar__subtitle">Nonprofit events across BC · filter by type</p>
         {userEmail && (
           <div className="sidebar__account">
-            {userRole && (
-              <span
-                className={`sidebar__role-badge sidebar__role-badge--${userRole}`}
-              >
-                {userRole === 'organizer' ? 'Organizer' : 'Visitor'}
+            {orgName && (
+              <span className="sidebar__org-name" title={orgName}>
+                {orgName}
               </span>
             )}
             <span className="sidebar__email" title={userEmail}>

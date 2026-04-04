@@ -9,7 +9,6 @@ export default function LoginPage() {
   const location = useLocation();
   const from = location.state?.from?.pathname || '/';
 
-  const [role, setRole] = useState('user');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -32,7 +31,7 @@ export default function LoginPage() {
     setFormError(null);
     setSubmitting(true);
     try {
-      await login(email, password, role);
+      await login(email, password);
       navigate(from, { replace: true });
     } catch (err) {
       setFormError(err.message || 'Something went wrong.');
@@ -47,29 +46,10 @@ export default function LoginPage() {
         <header className="login-card__header">
           <h1 className="login-card__title">Sign in</h1>
           <p className="login-card__subtitle">
-            ConnectBC — sign in as a visitor to browse and join events, or as an organizer
-            to post opportunities.
+            ConnectBC — sign in with your organization account to browse nonprofit events
+            across BC.
           </p>
         </header>
-
-        <div className="login-role" role="group" aria-label="Account type">
-          <button
-            type="button"
-            className={`login-role__btn ${role === 'user' ? 'login-role__btn--active' : ''}`}
-            onClick={() => setRole('user')}
-          >
-            Visitor
-            <span className="login-role__hint">Browse &amp; sign up</span>
-          </button>
-          <button
-            type="button"
-            className={`login-role__btn ${role === 'organizer' ? 'login-role__btn--active' : ''}`}
-            onClick={() => setRole('organizer')}
-          >
-            Organizer
-            <span className="login-role__hint">Post opportunities</span>
-          </button>
-        </div>
 
         <form className="login-form" onSubmit={handleSubmit}>
           <label className="login-field">
@@ -81,11 +61,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder={
-                role === 'organizer'
-                  ? 'organizer@yournonprofit.org'
-                  : 'you@email.com'
-              }
+              placeholder="you@organization.org"
             />
           </label>
           <label className="login-field">
@@ -121,10 +97,8 @@ export default function LoginPage() {
         </div>
 
         <p className="login-card__hint">
-          Demo: visitor <code>visitor@bc.org</code> / organizer <code>organizer@bc.org</code>{' '}
-          — password <code>demo123</code> for both (set{' '}
-          <code>VISITOR_EMAIL</code>, <code>ORGANIZER_EMAIL</code>, <code>DEMO_PASSWORD</code> in{' '}
-          <code>server/.env</code>). Legacy <code>DEMO_EMAIL</code> maps to the visitor account.
+          After running <code>npm run seed</code>, use any seeded org email with password{' '}
+          <code>password123</code> (see terminal output for emails).
         </p>
       </div>
     </div>

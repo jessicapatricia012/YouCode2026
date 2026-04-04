@@ -4,8 +4,6 @@ import FilterSidebar from '../components/FilterSidebar.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { EVENT_TYPE_ORDER } from '../eventTypes.js';
 
-const fetchOpts = { credentials: 'include' };
-
 function typesQuery(includedTypes) {
   const all =
     includedTypes.length === EVENT_TYPE_ORDER.length &&
@@ -16,7 +14,7 @@ function typesQuery(includedTypes) {
 }
 
 export default function MapPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, getAuthHeader } = useAuth();
   const [includedTypes, setIncludedTypes] = useState(() => [...EVENT_TYPE_ORDER]);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -41,7 +39,7 @@ export default function MapPage() {
     setError(null);
     const path = queryKey === 'all' ? '/api/events' : `/api/events${queryKey}`;
 
-    fetch(path, fetchOpts)
+    fetch(path, { headers: getAuthHeader() })
       .then((r) => {
         if (r.status === 401) throw new Error('session');
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -55,7 +53,7 @@ export default function MapPage() {
           if (err.message === 'session') {
             setError('Your session expired. Sign in again.');
           } else {
-            setError('Could not load events. Is the API running on port 3001?');
+            setError('Could not load events. Is the API and database running?');
           }
           setEvents([]);
         }
@@ -67,7 +65,7 @@ export default function MapPage() {
     return () => {
       cancelled = true;
     };
-  }, [queryKey]);
+  }, [queryKey, getAuthHeader]);
 
   const onToggleType = useCallback((type) => {
     setIncludedTypes((prev) =>
@@ -79,32 +77,37 @@ export default function MapPage() {
     setIncludedTypes([...EVENT_TYPE_ORDER]);
   }, []);
 
-  const onSignup = useCallback(async (ev) => {
-    const r = await fetch(`/api/events/${ev.id}/signups`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      const msg =
-        data.error === 'full'
-          ? 'This event is full.'
-          : r.status === 404
-            ? 'Event not found.'
-            : r.status === 401
-              ? 'Please sign in again.'
-              : 'Signup failed.';
-      window.alert(msg);
-      return;
-    }
-    setEvents((prev) =>
-      prev.map((e) =>
-        e.id === ev.id ? { ...e, spotsLeft: data.spotsLeft } : e
-      )
-    );
-  }, []);
+  const onSignup = useCallback(
+    async (ev) => {
+      const r = await fetch(`/api/events/${ev.id}/signups`, {
+        method: 'POST',
+        headers: {
+          ...getAuthHeader(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const msg =
+          data.error === 'full'
+            ? 'This event is full.'
+            : r.status === 404
+              ? 'Event not found.'
+              : r.status === 401
+                ? 'Please sign in again.'
+                : 'Signup failed.';
+        window.alert(msg);
+        return;
+      }
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === ev.id ? { ...e, spotsLeft: data.spotsLeft } : e
+        )
+      );
+    },
+    [getAuthHeader]
+  );
 
   return (
     <div className="app">
@@ -112,8 +115,8 @@ export default function MapPage() {
         includedTypes={includedTypes}
         onToggleType={onToggleType}
         onSelectAll={onSelectAll}
+        orgName={user?.name}
         userEmail={user?.email}
-        userRole={user?.role}
         onLogout={logout}
       />
       <EventMap
