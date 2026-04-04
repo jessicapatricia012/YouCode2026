@@ -6,10 +6,17 @@ import volunteerRouter from '../routes/volunteer.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import {
   listEventsFromDb,
+  listOrgEventsFromDb,
   getEventByIdFromDb,
+  getOrgEventByIdFromDb,
+  createEventForOrg,
   createSignupForEvent,
+  deleteEventByOrg,
+  updateEventByOrg,
+  listSignupsForOrgEvent,
   parseTypesQuery,
 } from './eventsDb.js';
+import { suggestCityForStreetLine } from './geocode.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -29,12 +36,118 @@ app.get('/api/ping', (_req, res) => {
 
 app.use('/api/auth', authRouter);
 
+/** Suggest BC city from a street line (Mapbox). Requires MAPBOX_TOKEN. */
+app.get('/api/geocode/suggest', requireAuth, async (req, res) => {
+  try {
+    const line = String(req.query.line ?? '').trim();
+    if (!line) return res.json({ city: null });
+    const city = await suggestCityForStreetLine(line);
+    res.json({ city });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.get('/api/orgs/:orgId/events', requireAuth, async (req, res) => {
+  try {
+    if (req.auth.role !== 'organizer' || req.auth.id !== req.params.orgId) {
+      return res.status(403).json({
+        error: 'forbidden',
+        message: 'Only your organization can list these events.',
+      });
+    }
+    const events = await listOrgEventsFromDb(req.params.orgId);
+    res.json({ events });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.post('/api/events', requireAuth, async (req, res) => {
+  try {
+    if (req.auth.role !== 'organizer') {
+      return res.status(403).json({ error: 'forbidden', message: 'Organizers only.' });
+    }
+    const event = await createEventForOrg(req.auth.id, req.body ?? {});
+    res.status(201).json({ event });
+  } catch (err) {
+    if (err.code === 'validation') {
+      return res.status(400).json({ error: 'invalid_input', message: err.message });
+    }
+    if (err.code === 'geocode_failed') {
+      return res.status(422).json({ error: 'geocode_failed', message: err.message });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.delete('/api/events/:id', requireAuth, async (req, res) => {
+  try {
+    if (req.auth.role !== 'organizer') {
+      return res.status(403).json({ error: 'forbidden', message: 'Organizers only.' });
+    }
+    const result = await deleteEventByOrg(req.params.id, req.auth.id);
+    if (!result.deleted) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.get('/api/events/:id/signups', requireAuth, async (req, res) => {
+  try {
+    if (req.auth.role !== 'organizer') {
+      return res.status(403).json({ error: 'forbidden', message: 'Organizers only.' });
+    }
+    const result = await listSignupsForOrgEvent(req.params.id, req.auth.id);
+    if (!result) {
+      return res.status(404).json({ error: 'not_found', message: 'Event not found.' });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.patch('/api/events/:id', requireAuth, async (req, res) => {
+  try {
+    if (req.auth.role !== 'organizer') {
+      return res.status(403).json({ error: 'forbidden', message: 'Organizers only.' });
+    }
+    const event = await updateEventByOrg(req.params.id, req.auth.id, req.body ?? {});
+    res.json({ event });
+  } catch (err) {
+    if (err.code === 'not_found') {
+      return res.status(404).json({ error: 'not_found', message: 'Event not found.' });
+    }
+    if (err.code === 'validation') {
+      return res.status(400).json({ error: 'invalid_input', message: err.message });
+    }
+    if (err.code === 'geocode_failed') {
+      return res.status(422).json({ error: 'geocode_failed', message: err.message });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// Public read: map must show the same pins for every account (no per-role filtering).
+// Signup and organizer writes stay protected.
+app.get('/api/events', async (req, res) => {
 app.use('/api/volunteer', volunteerRouter);
 
 app.get('/api/events', requireAuth, async (req, res) => {
   try {
     const types = parseTypesQuery(req.query.types);
     const events = await listEventsFromDb(types);
+    res.set('Cache-Control', 'no-store');
     res.json({ events });
   } catch (err) {
     console.error(err);
@@ -44,7 +157,12 @@ app.get('/api/events', requireAuth, async (req, res) => {
 
 app.get('/api/events/:id', requireAuth, async (req, res) => {
   try {
-    const ev = await getEventByIdFromDb(req.params.id);
+    const { id } = req.params;
+    if (req.auth.role === 'organizer') {
+      const own = await getOrgEventByIdFromDb(id, req.auth.id);
+      if (own) return res.json(own);
+    }
+    const ev = await getEventByIdFromDb(id);
     if (!ev) return res.status(404).json({ error: 'not_found' });
     res.json(ev);
   } catch (err) {

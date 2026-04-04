@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import './LoginPage.css';
 
 function destinationAfterAuth(role) {
-  return role === 'organizer' ? '/organize' : '/';
+  return role === 'organizer' ? '/dashboard' : '/';
 }
 
 export default function RegisterPage() {
@@ -34,7 +34,7 @@ export default function RegisterPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setFormError(null);
-    if (password !== confirm) {
+    if (password.trim() !== confirm.trim()) {
       setFormError('Passwords do not match.');
       return;
     }

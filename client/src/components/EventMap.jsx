@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
-import Map, { Marker, NavigationControl, Popup } from 'react-map-gl/mapbox';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Map, { Layer, Marker, NavigationControl, Popup, Source } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
+import { geodesicCircleFeature } from '../geo.js';
 import { EVENT_TYPE_COLORS } from '../eventTypes.js';
 
 const token = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
@@ -19,9 +20,27 @@ function formatEventDate(iso) {
   }
 }
 
-export default function EventMap({ events, loading, error, onSignup }) {
+const RADIUS_FILL = '#214bb2';
+const RADIUS_FILL_OPACITY = 0.1;
+const RADIUS_LINE_OPACITY = 0.65;
+
+export default function EventMap({ events, loading, error, onSignup, userCoords, radiusKm }) {
+  const mapRef = useRef(null);
+  const [mapReady, setMapReady] = useState(false);
   const [popupId, setPopupId] = useState(null);
   const [signupBusy, setSignupBusy] = useState(false);
+
+  const mappableEvents = useMemo(
+    () =>
+      events.filter(
+        (ev) =>
+          typeof ev.lat === 'number' &&
+          typeof ev.lng === 'number' &&
+          Number.isFinite(ev.lat) &&
+          Number.isFinite(ev.lng)
+      ),
+    [events]
+  );
 
   const popupEvent = useMemo(
     () => (popupId ? events.find((e) => e.id === popupId) ?? null : null),
@@ -36,6 +55,35 @@ export default function EventMap({ events, loading, error, onSignup }) {
     }),
     []
   );
+
+  const radiusCircleGeoJson = useMemo(() => {
+    if (
+      radiusKm == null ||
+      !userCoords ||
+      typeof radiusKm !== 'number' ||
+      !Number.isFinite(radiusKm) ||
+      radiusKm <= 0
+    ) {
+      return null;
+    }
+    return {
+      type: 'FeatureCollection',
+      features: [geodesicCircleFeature(userCoords.lat, userCoords.lng, radiusKm)],
+    };
+  }, [radiusKm, userCoords]);
+
+  useEffect(() => {
+    if (!mapReady || !userCoords) return;
+    const ref = mapRef.current;
+    if (!ref) return;
+    const map = typeof ref.getMap === 'function' ? ref.getMap() : ref;
+    map?.flyTo?.({
+      center: [userCoords.lng, userCoords.lat],
+      zoom: 12,
+      duration: 1400,
+      essential: true,
+    });
+  }, [mapReady, userCoords]);
 
   const handleSignup = useCallback(async () => {
     if (!popupEvent) return;
@@ -62,15 +110,48 @@ export default function EventMap({ events, loading, error, onSignup }) {
       {loading && <div className="map-overlay">Loading events…</div>}
       {error && <div className="map-overlay map-overlay--error">{error}</div>}
       <Map
+        ref={mapRef}
         mapboxAccessToken={token}
         initialViewState={initialView}
         style={{ width: '100%', height: '100%' }}
         mapStyle="mapbox://styles/mapbox/light-v11"
         reuseMaps
+        onLoad={() => setMapReady(true)}
         onClick={() => setPopupId(null)}
       >
         <NavigationControl position="top-right" />
-        {events.map((ev) => {
+        {radiusCircleGeoJson ? (
+          <Source id="connectbc-radius" type="geojson" data={radiusCircleGeoJson}>
+            <Layer
+              id="connectbc-radius-fill"
+              type="fill"
+              paint={{
+                'fill-color': RADIUS_FILL,
+                'fill-opacity': RADIUS_FILL_OPACITY,
+              }}
+            />
+            <Layer
+              id="connectbc-radius-line"
+              type="line"
+              paint={{
+                'line-color': RADIUS_FILL,
+                'line-width': 2,
+                'line-opacity': RADIUS_LINE_OPACITY,
+              }}
+            />
+          </Source>
+        ) : null}
+        {userCoords ? (
+          <Marker
+            longitude={userCoords.lng}
+            latitude={userCoords.lat}
+            anchor="center"
+            onClick={(e) => e.originalEvent.stopPropagation()}
+          >
+            <div className="map-user-dot" role="img" aria-label="Your location" />
+          </Marker>
+        ) : null}
+        {mappableEvents.map((ev) => {
           const color = EVENT_TYPE_COLORS[ev.type] ?? '#666';
           return (
             <Marker
@@ -104,12 +185,28 @@ export default function EventMap({ events, loading, error, onSignup }) {
             <div className="map-popup">
               <h3 className="map-popup__title">{popupEvent.title}</h3>
               <p className="map-popup__org">{popupEvent.orgName}</p>
+              <p className="map-popup__meta">
+                {[popupEvent.address, popupEvent.city].filter(Boolean).join(', ') || '—'}
+              </p>
               <p className="map-popup__meta">{formatEventDate(popupEvent.startsAt)}</p>
               <p className="map-popup__meta">
                 {popupEvent.spotsLeft > 0
                   ? `${popupEvent.spotsLeft} spot${popupEvent.spotsLeft === 1 ? '' : 's'} left`
                   : 'Full'}
               </p>
+              {popupEvent.websiteUrl ? (
+                <p className="map-popup__meta">
+                  <a
+                    href={popupEvent.websiteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="map-popup__link"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Event website →
+                  </a>
+                </p>
+              ) : null}
               <button
                 type="button"
                 className="map-popup__cta"

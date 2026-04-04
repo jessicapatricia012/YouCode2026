@@ -56,10 +56,12 @@ export function AuthProvider({ children }) {
   }, [refresh]);
 
   const login = useCallback(async (email, password) => {
+    const e = String(email ?? '').trim();
+    const p = String(password ?? '').trim();
     const r = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email: e, password: p }),
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
@@ -77,10 +79,13 @@ export function AuthProvider({ children }) {
   }, []);
 
   const register = useCallback(async (name, email, password, role) => {
+    const n = String(name ?? '').trim();
+    const e = String(email ?? '').trim();
+    const p = String(password ?? '').trim();
     const r = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password, role }),
+      body: JSON.stringify({ name: n, email: e, password: p, role }),
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
