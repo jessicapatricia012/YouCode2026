@@ -138,12 +138,11 @@ app.patch('/api/events/:id', requireAuth, async (req, res) => {
   }
 });
 
+app.use('/api/volunteer', volunteerRouter);
+
 // Public read: map must show the same pins for every account (no per-role filtering).
 // Signup and organizer writes stay protected.
 app.get('/api/events', async (req, res) => {
-app.use('/api/volunteer', volunteerRouter);
-
-app.get('/api/events', requireAuth, async (req, res) => {
   try {
     const types = parseTypesQuery(req.query.types);
     const events = await listEventsFromDb(types);

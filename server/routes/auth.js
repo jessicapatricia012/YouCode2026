@@ -61,6 +61,16 @@ async function emailExistsAnywhere(email) {
   return o.rowCount > 0;
 }
 
+async function bcryptMatches(row, plain) {
+  const h = row?.password_hash;
+  if (!h || typeof h !== 'string') return false;
+  try {
+    return await bcrypt.compare(plain, h);
+  } catch {
+    return false;
+  }
+}
+
 /** POST /api/auth/register */
 router.post('/register', async (req, res) => {
   try {
@@ -132,7 +142,12 @@ router.post('/register', async (req, res) => {
   }
 });
 
-/** POST /api/auth/login — single form; role comes from whichever account matches email */
+/**
+ * POST /api/auth/login — single form.
+ * Checks both `users` and `orgs` for the email. If the same email exists in both (e.g. after a merge),
+ * the visitor row used to block organizer login when the password only matched the org; we now accept
+ * whichever password matches. If both match, visitor wins.
+ */
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body ?? {};
@@ -147,14 +162,17 @@ router.post('/login', async (req, res) => {
       `SELECT id, display_name, email, password_hash, created_at FROM users WHERE email = $1`,
       [e]
     );
+    const { rows: oRows } = await pool.query(
+      `SELECT id, name, email, password_hash, website, logo_url, created_at FROM orgs WHERE email = $1`,
+      [e]
+    );
     const u = uRows[0];
-    if (u) {
-      if (!(await bcrypt.compare(p, u.password_hash))) {
-        return res.status(401).json({
-          error: 'invalid_credentials',
-          message: 'Invalid email or password.',
-        });
-      }
+    const o = oRows[0];
+
+    const userOk = u && (await bcryptMatches(u, p));
+    const orgOk = o && (await bcryptMatches(o, p));
+
+    if (userOk) {
       const user = serializeVisitor(u);
       const token = signAccountToken({
         id: user.id,
@@ -165,25 +183,21 @@ router.post('/login', async (req, res) => {
       return res.json({ token, user });
     }
 
-    const { rows: oRows } = await pool.query(
-      `SELECT id, name, email, password_hash, website, logo_url, created_at FROM orgs WHERE email = $1`,
-      [e]
-    );
-    const o = oRows[0];
-    if (!o || !(await bcrypt.compare(p, o.password_hash))) {
-      return res.status(401).json({
-        error: 'invalid_credentials',
-        message: 'Invalid email or password.',
+    if (orgOk) {
+      const user = serializeOrganizer(o);
+      const token = signAccountToken({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: 'organizer',
       });
+      return res.json({ token, user });
     }
-    const user = serializeOrganizer(o);
-    const token = signAccountToken({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: 'organizer',
+
+    return res.status(401).json({
+      error: 'invalid_credentials',
+      message: 'Invalid email or password.',
     });
-    res.json({ token, user });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'server_error' });
