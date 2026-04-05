@@ -27,6 +27,7 @@ export default function MapPage() {
   const [error, setError] = useState(null);
   const [userCoords, setUserCoords] = useState(null);
   const [radiusStepIndex, setRadiusStepIndex] = useState(0);
+  const [mapSearchQuery, setMapSearchQuery] = useState('');
 
   /** Skill-based recommendations for visitors (sidebar “For you”). */
   const [skillRecs, setSkillRecs] = useState({
@@ -231,6 +232,18 @@ export default function MapPage() {
     return list;
   }, [events, radiusLimitKm, userCoords, focusEventId]);
 
+  const pickSearchEvent = useCallback(
+    (eventId) => {
+      setMapSearchQuery('');
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('event', eventId);
+        return next;
+      });
+    },
+    [setSearchParams]
+  );
+
   const onToggleType = useCallback((type) => {
     setIncludedTypes((prev) =>
       prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
@@ -317,6 +330,9 @@ export default function MapPage() {
         volunteerProfileSkillIds={
           user?.role === 'user' ? skillRecs.profileSkills ?? [] : undefined
         }
+        searchQuery={mapSearchQuery}
+        onSearchChange={setMapSearchQuery}
+        onSearchPickEvent={pickSearchEvent}
       />
     </div>
   );

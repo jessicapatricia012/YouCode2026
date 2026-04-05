@@ -3,6 +3,7 @@ import Map, { Layer, Marker, NavigationControl, Popup, Source } from 'react-map-
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { geodesicCircleFeature } from '../geo.js';
 import { EVENT_TYPE_COLORS } from '../eventTypes.js';
+import { eventsMatchingMapSearch } from '../mapEventSearch.js';
 import { SKILL_TAGS } from '../skillTags.js';
 
 const token = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
@@ -36,12 +37,39 @@ export default function EventMap({
   focusEventId,
   /** When set (volunteer), popup skill tags highlight ids that appear on this list. */
   volunteerProfileSkillIds,
+  searchQuery = '',
+  onSearchChange,
+  onSearchPickEvent,
 }) {
   const mapRef = useRef(null);
+  const searchWrapRef = useRef(null);
   const lastFocusedIdRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
   const [popupId, setPopupId] = useState(null);
   const [signupBusy, setSignupBusy] = useState(false);
+  const [searchDropdownOpen, setSearchDropdownOpen] = useState(false);
+
+  const searchMatches = useMemo(
+    () => eventsMatchingMapSearch(events, searchQuery, 20),
+    [events, searchQuery]
+  );
+
+  useEffect(() => {
+    if (!onSearchChange || !searchQuery.trim()) {
+      setSearchDropdownOpen(false);
+    }
+  }, [onSearchChange, searchQuery]);
+
+  useEffect(() => {
+    if (!onSearchChange) return;
+    const onDocDown = (e) => {
+      const el = searchWrapRef.current;
+      if (!el || el.contains(e.target)) return;
+      setSearchDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', onDocDown);
+    return () => document.removeEventListener('mousedown', onDocDown);
+  }, [onSearchChange]);
 
   const mappableEvents = useMemo(
     () =>
@@ -166,8 +194,105 @@ export default function EventMap({
     );
   }
 
+  const searchTrimmed = searchQuery.trim();
+  const showSearchDropdown =
+    Boolean(onSearchPickEvent) &&
+    Boolean(searchTrimmed) &&
+    searchDropdownOpen;
+
   return (
     <div className="map-shell">
+      {onSearchChange ? (
+        <div className="map-search" role="search">
+          <div className="map-search__inner" ref={searchWrapRef}>
+            <span className="map-search__icon" aria-hidden>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="M21 21l-4.3-4.3" />
+              </svg>
+            </span>
+            <input
+              type="search"
+              className="map-search__input"
+              placeholder="Search events, org, place, skills…"
+              value={searchQuery}
+              onChange={(e) => {
+                onSearchChange(e.target.value);
+                setSearchDropdownOpen(true);
+              }}
+              onFocus={() => setSearchDropdownOpen(true)}
+              aria-label="Search events on the map"
+              aria-expanded={showSearchDropdown}
+              aria-controls={showSearchDropdown ? 'map-search-suggestions' : undefined}
+              aria-autocomplete="list"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            {searchTrimmed ? (
+              <button
+                type="button"
+                className="map-search__clear"
+                aria-label="Clear search"
+                onClick={() => {
+                  onSearchChange('');
+                  setSearchDropdownOpen(false);
+                }}
+              >
+                ×
+              </button>
+            ) : null}
+            {showSearchDropdown ? (
+              <div
+                id="map-search-suggestions"
+                className="map-search__dropdown"
+                role="listbox"
+                aria-label="Matching events"
+              >
+                {loading ? (
+                  <div className="map-search__dropdown-status">Loading events…</div>
+                ) : error ? (
+                  <div className="map-search__dropdown-status map-search__dropdown-status--error">
+                    {error}
+                  </div>
+                ) : searchMatches.length === 0 ? (
+                  <div className="map-search__dropdown-status" role="status">
+                    No events match “{searchTrimmed}”. Try another word or clear the search.
+                  </div>
+                ) : (
+                  searchMatches.map((ev) => (
+                    <button
+                      key={ev.id}
+                      type="button"
+                      role="option"
+                      className="map-search__dropdown-item"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        onSearchPickEvent(ev.id);
+                        setSearchDropdownOpen(false);
+                      }}
+                    >
+                      <span className="map-search__dropdown-title">{ev.title}</span>
+                      <span className="map-search__dropdown-sub">
+                        {[ev.orgName, ev.city].filter(Boolean).join(' · ') || '—'}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       {loading && <div className="map-overlay">Loading events…</div>}
       {error && <div className="map-overlay map-overlay--error">{error}</div>}
       <Map
