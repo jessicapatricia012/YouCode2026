@@ -701,27 +701,49 @@ export async function listSignupsForOrgEvent(eventId, orgId) {
   );
   if (!own.rowCount) return null;
 
-  const { rows } = await pool.query(
-    `
-    SELECT id, name, email, signed_up_at
-    FROM signups
-    WHERE event_id = $1
-    ORDER BY signed_up_at ASC
-    `,
-    [eventId]
-  );
+  let rows;
+  try {
+    const result = await pool.query(
+      `
+      SELECT id, name, email, signed_up_at, signup_type, volunteer_profile
+      FROM signups
+      WHERE event_id = $1
+      ORDER BY signed_up_at ASC
+      `,
+      [eventId]
+    );
+    rows = result.rows;
+  } catch (err) {
+    // If signup_type column doesn't exist, fall back to query without it
+    if (err?.code === '42703') {
+      const result = await pool.query(
+        `
+        SELECT id, name, email, signed_up_at
+        FROM signups
+        WHERE event_id = $1
+        ORDER BY signed_up_at ASC
+        `,
+        [eventId]
+      );
+      rows = result.rows;
+    } else {
+      throw err;
+    }
+  }
 
   const signups = rows.map((row) => ({
     id: row.id,
     name: row.name,
     email: row.email,
     signedUpAt: row.signed_up_at,
+    signupType: row.signup_type || 'attending',
+    volunteerProfile: row.volunteer_profile,
   }));
 
   return { signups, total: signups.length };
 }
 
-export async function createSignupForEvent(eventId, { name, email }) {
+export async function createSignupForEvent(eventId, { name, email, signupType = 'attending', volunteerProfile = null }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -744,8 +766,8 @@ export async function createSignupForEvent(eventId, { name, email }) {
       return { ok: false, error: 'full' };
     }
     await client.query(
-      `INSERT INTO signups (event_id, name, email) VALUES ($1, $2, $3)`,
-      [eventId, name, email]
+      `INSERT INTO signups (event_id, name, email, signup_type, volunteer_profile) VALUES ($1, $2, $3, $4, $5)`,
+      [eventId, name, email, signupType, volunteerProfile]
     );
     await client.query('COMMIT');
     const r = upd.rows[0];

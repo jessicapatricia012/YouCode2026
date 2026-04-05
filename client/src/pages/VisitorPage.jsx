@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import SkillTagPicker from '../components/SkillTagPicker.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { normalizeSkillTagsClient, SKILL_TAGS } from '../skillTags.js';
@@ -20,6 +20,7 @@ function formatStartsAt(iso) {
 }
 
 export default function VisitorPage() {
+  const navigate = useNavigate();
   const { getAuthHeader } = useAuth();
   const [profile, setProfile] = useState({
     skills: [],
@@ -95,6 +96,8 @@ export default function VisitorPage() {
       if (r.ok) {
         setMessage({ type: 'success', text: 'Profile updated successfully!' });
         await loadRecommendations();
+        // Navigate back to map after successful save
+        setTimeout(() => navigate('/'), 1500);
       } else {
         setMessage({ type: 'error', text: 'Failed to update profile.' });
       }
@@ -267,9 +270,19 @@ export default function VisitorPage() {
           <div className={`message message--${message.type}`}>{message.text}</div>
         )}
 
-        <button type="submit" className="save-btn" disabled={saving}>
-          {saving ? 'Saving…' : 'Save Profile'}
-        </button>
+        <div className="visitor-form__actions">
+          <button
+            type="button"
+            className="visitor-form__cancel-btn"
+            onClick={() => navigate('/')}
+            disabled={saving}
+          >
+            Cancel
+          </button>
+          <button type="submit" className="visitor-form__submit-btn" disabled={saving}>
+            {saving ? 'Saving…' : 'Save Profile'}
+          </button>
+        </div>
       </form>
     </div>
   );

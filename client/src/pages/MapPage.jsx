@@ -149,14 +149,14 @@ export default function MapPage() {
   }, []);
 
   const onSignup = useCallback(
-    async (ev) => {
+    async (ev, signupType = 'attending') => {
       const r = await fetch(`/api/events/${ev.id}/signups`, {
         method: 'POST',
         headers: {
           ...getAuthHeader(),
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ signupType }),
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {

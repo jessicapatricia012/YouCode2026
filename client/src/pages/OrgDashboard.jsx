@@ -370,21 +370,85 @@ export default function OrgDashboard() {
                         <tr>
                           <th>Name</th>
                           <th>Email</th>
+                          <th>Type</th>
                           <th>Signed up</th>
                         </tr>
                       </thead>
                       <tbody>
                         {signupsList.map((s) => (
                           <tr key={s.id}>
-                            <td>{s.name}</td>
+                            <td>
+                              {s.signupType === 'volunteering' && s.volunteerProfile ? (
+                                <button
+                                  type="button"
+                                  className="org-dashboard__volunteer-details-btn"
+                                  onClick={() => setSignupModal(prev => prev?.id === s.id ? null : { ...prev, selectedSignup: s })}>
+                                  {s.name} {signupModal?.selectedSignup?.id === s.id ? '▼' : '▶'}
+                                </button>
+                              ) : (
+                                s.name
+                              )}
+                            </td>
                             <td>
                               <a href={`mailto:${s.email}`}>{s.email}</a>
+                            </td>
+                            <td>
+                              <span className={`org-dashboard__signup-type org-dashboard__signup-type--${s.signupType}`}>
+                                {s.signupType === 'attending' ? 'Attending' : 'Volunteering'}
+                              </span>
                             </td>
                             <td>{formatSignupDate(s.signedUpAt)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                    {signupModal?.selectedSignup && signupModal.selectedSignup.signupType === 'volunteering' && signupModal.selectedSignup.volunteerProfile && (
+                      <div className="org-dashboard__volunteer-details">
+                        <h4>Volunteer Profile: {signupModal.selectedSignup.name}</h4>
+                        <div className="org-dashboard__volunteer-details-grid">
+                          {signupModal.selectedSignup.volunteerProfile.skills?.length > 0 && (
+                            <div className="org-dashboard__volunteer-detail">
+                              <strong>Skills:</strong>
+                              <p>{signupModal.selectedSignup.volunteerProfile.skills.join(', ')}</p>
+                            </div>
+                          )}
+                          {signupModal.selectedSignup.volunteerProfile.availability && (
+                            <div className="org-dashboard__volunteer-detail">
+                              <strong>Availability:</strong>
+                              <p>{signupModal.selectedSignup.volunteerProfile.availability}</p>
+                            </div>
+                          )}
+                          {signupModal.selectedSignup.volunteerProfile.interests?.length > 0 && (
+                            <div className="org-dashboard__volunteer-detail">
+                              <strong>Interests:</strong>
+                              <p>{signupModal.selectedSignup.volunteerProfile.interests.join(', ')}</p>
+                            </div>
+                          )}
+                          {signupModal.selectedSignup.volunteerProfile.experience && (
+                            <div className="org-dashboard__volunteer-detail">
+                              <strong>Experience:</strong>
+                              <p>{signupModal.selectedSignup.volunteerProfile.experience}</p>
+                            </div>
+                          )}
+                          {signupModal.selectedSignup.volunteerProfile.contactPreferences && (
+                            <div className="org-dashboard__volunteer-detail">
+                              <strong>Contact Preferences:</strong>
+                              <p>{signupModal.selectedSignup.volunteerProfile.contactPreferences}</p>
+                            </div>
+                          )}
+                          {(signupModal.selectedSignup.volunteerProfile.emergencyContactName || signupModal.selectedSignup.volunteerProfile.emergencyContactPhone) && (
+                            <div className="org-dashboard__volunteer-detail">
+                              <strong>Emergency Contact:</strong>
+                              <p>
+                                {signupModal.selectedSignup.volunteerProfile.emergencyContactName}
+                                {signupModal.selectedSignup.volunteerProfile.emergencyContactName && signupModal.selectedSignup.volunteerProfile.emergencyContactPhone && ' - '}
+                                {signupModal.selectedSignup.volunteerProfile.emergencyContactPhone}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </>

@@ -56,6 +56,8 @@ export default function EventMap({
     [events, popupId]
   );
 
+  const [signupType, setSignupType] = useState(null);
+
   const initialView = useMemo(
     () => ({
       longitude: -123.35,
@@ -94,13 +96,15 @@ export default function EventMap({
     });
   }, [mapReady, userCoords]);
 
-  const handleSignup = useCallback(async () => {
+  const handleSignup = useCallback(async (type) => {
     if (!popupEvent) return;
     setSignupBusy(true);
     try {
-      await onSignup?.(popupEvent);
+      await onSignup?.(popupEvent, type);
     } finally {
       setSignupBusy(false);
+      setSignupType(null);
+      setPopupId(null);
     }
   }, [onSignup, popupEvent]);
 
@@ -224,17 +228,30 @@ export default function EventMap({
                 </p>
               ) : null}
               {!organizerCannotVolunteer ? (
-                <button
-                  type="button"
-                  className="map-popup__cta"
-                  disabled={popupEvent.spotsLeft <= 0 || signupBusy}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSignup();
-                  }}
-                >
-                  {signupBusy ? 'Signing up…' : "I'm in"}
-                </button>
+                <div className="map-popup__buttons">
+                  <button
+                    type="button"
+                    className="map-popup__cta"
+                    disabled={popupEvent.spotsLeft <= 0 || signupBusy}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSignup('attending');
+                    }}
+                  >
+                    {signupBusy ? 'Signing up…' : "I'm attending"}
+                  </button>
+                  <button
+                    type="button"
+                    className="map-popup__cta"
+                    disabled={popupEvent.spotsLeft <= 0 || signupBusy}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSignup('volunteering');
+                    }}
+                  >
+                    {signupBusy ? 'Signing up…' : "I'm volunteering"}
+                  </button>
+                </div>
               ) : null}
             </div>
           </Popup>
