@@ -524,4 +524,74 @@
 
 .org-dashboard__volunteer-list li {
   margin-bottom: 0.2rem;
+.org-dashboard__signup-type {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 4px;
+  text-transform: capitalize;
+}
+
+.org-dashboard__signup-type--attending {
+  background: #e0f5f5;
+  color: #0d7c7c;
+}
+
+.org-dashboard__signup-type--volunteering {
+  background: #fef3e0;
+  color: #a86818;
+}
+
+.org-dashboard__volunteer-details-btn {
+  background: none;
+  border: none;
+  color: var(--connectbc-brand);
+  cursor: pointer;
+  font-weight: 500;
+  text-decoration: underline;
+  padding: 0;
+  font-size: inherit;
+}
+
+.org-dashboard__volunteer-details-btn:hover {
+  color: var(--connectbc-brand-hover);
+}
+
+.org-dashboard__volunteer-details {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.org-dashboard__volunteer-details h4 {
+  margin: 0 0 1rem 0;
+  color: #495057;
+  font-size: 1.1rem;
+}
+
+.org-dashboard__volunteer-details-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.org-dashboard__volunteer-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.org-dashboard__volunteer-detail strong {
+  color: #495057;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.org-dashboard__volunteer-detail p {
+  margin: 0;
+  color: #6c757d;
+  line-height: 1.4;
 }

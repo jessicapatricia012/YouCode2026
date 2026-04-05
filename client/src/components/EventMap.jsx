@@ -108,6 +108,7 @@ export default function EventMap({
       return String(a).localeCompare(String(b));
     });
   }, [popupEvent, volunteerSkillSet]);
+  const [signupType, setSignupType] = useState(null);
 
   const initialView = useMemo(
     () => ({
@@ -176,13 +177,15 @@ export default function EventMap({
     setPopupId(focusEventId);
   }, [focusEventId, mapReady, events]);
 
-  const handleSignup = useCallback(async () => {
+  const handleSignup = useCallback(async (type) => {
     if (!popupEvent) return;
     setSignupBusy(true);
     try {
-      await onSignup?.(popupEvent);
+      await onSignup?.(popupEvent, type);
     } finally {
       setSignupBusy(false);
+      setSignupType(null);
+      setPopupId(null);
     }
   }, [onSignup, popupEvent]);
 
@@ -441,17 +444,30 @@ export default function EventMap({
                 </div>
               ) : null}
               {!organizerCannotVolunteer ? (
-                <button
-                  type="button"
-                  className="map-popup__cta"
-                  disabled={popupEvent.spotsLeft <= 0 || signupBusy}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSignup();
-                  }}
-                >
-                  {signupBusy ? 'Signing up…' : "I'm in"}
-                </button>
+                <div className="map-popup__buttons">
+                  <button
+                    type="button"
+                    className="map-popup__cta"
+                    disabled={popupEvent.spotsLeft <= 0 || signupBusy}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSignup('attending');
+                    }}
+                  >
+                    {signupBusy ? 'Signing up…' : "I'm attending"}
+                  </button>
+                  <button
+                    type="button"
+                    className="map-popup__cta"
+                    disabled={popupEvent.spotsLeft <= 0 || signupBusy}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSignup('volunteering');
+                    }}
+                  >
+                    {signupBusy ? 'Signing up…' : "I'm volunteering"}
+                  </button>
+                </div>
               ) : null}
             </div>
           </Popup>

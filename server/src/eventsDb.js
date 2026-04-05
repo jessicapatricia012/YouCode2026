@@ -734,9 +734,9 @@ export async function listSignupsForOrgEvent(eventId, orgId) {
 
   let rows;
   try {
-    ({ rows } = await pool.query(
+    const result = await pool.query(
       `
-      SELECT id, name, email, signed_up_at, user_id
+      SELECT id, name, email, signed_up_at, signup_type, volunteer_profile
       FROM signups
       WHERE event_id = $1
       ORDER BY signed_up_at ASC
@@ -788,6 +788,34 @@ export async function listSignupsForOrgEvent(eventId, orgId) {
       profileUserId,
     };
   });
+    );
+    rows = result.rows;
+  } catch (err) {
+    // If signup_type column doesn't exist, fall back to query without it
+    if (err?.code === '42703') {
+      const result = await pool.query(
+        `
+        SELECT id, name, email, signed_up_at
+        FROM signups
+        WHERE event_id = $1
+        ORDER BY signed_up_at ASC
+        `,
+        [eventId]
+      );
+      rows = result.rows;
+    } else {
+      throw err;
+    }
+  }
+
+  const signups = rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    signedUpAt: row.signed_up_at,
+    signupType: row.signup_type || 'attending',
+    volunteerProfile: row.volunteer_profile,
+  }));
 
   return { signups, total: signups.length };
 }
@@ -965,9 +993,15 @@ async function signupIncrementSpots(client, eventId, useAdminRemovedFilter) {
     : '';
   return client.query(
     `UPDATE events
+export async function createSignupForEvent(eventId, { name, email, signupType = 'attending', volunteerProfile = null }) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const upd = await client.query(
+      `UPDATE events
        SET spots_taken = spots_taken + 1
        WHERE id = $1
-         AND is_active = true${adminClause}
+         AND is_active = true
          AND spots_taken < spots_total
        RETURNING spots_total, spots_taken`,
     [eventId]
@@ -1009,15 +1043,14 @@ export async function createSignupForEvent(eventId, { name, email, userId }) {
       if (!isMissingAdminRemovedColumn(err)) throw err;
       upd = await signupIncrementSpots(client, eventId, false);
     }
+      [eventId]
+    );
     if (upd.rowCount === 0) {
       await client.query('ROLLBACK');
-      let ex;
-      try {
-        ex = await signupCheckActiveEvent(client, eventId, true);
-      } catch (err) {
-        if (!isMissingAdminRemovedColumn(err)) throw err;
-        ex = await signupCheckActiveEvent(client, eventId, false);
-      }
+      const ex = await client.query(
+        'SELECT 1 FROM events WHERE id = $1 AND is_active = true',
+        [eventId]
+      );
       if (ex.rowCount === 0) return { ok: false, error: 'not_found' };
       return { ok: false, error: 'full' };
     }
@@ -1061,6 +1094,10 @@ export async function createSignupForEvent(eventId, { name, email, userId }) {
         spotsLeft: row.spots_total - row.spots_taken,
       };
     }
+    await client.query(
+      `INSERT INTO signups (event_id, name, email, signup_type, volunteer_profile) VALUES ($1, $2, $3, $4, $5)`,
+      [eventId, name, email, signupType, volunteerProfile]
+    );
     await client.query('COMMIT');
     const r = upd.rows[0];
     return {

@@ -22,7 +22,7 @@ import {
   adminRemoveEventById,
   listAllEventsForAdmin,
 } from './adminEventsDb.js';
-import { notifyOrganizerEventRemoved } from './notifyEmail.js';
+// import { notifyOrganizerEventRemoved } from './notifyEmail.js';
 import { suggestCityForStreetLine } from './geocode.js';
 
 const app = express();
@@ -60,15 +60,15 @@ app.delete('/api/admin/events/:id', requireAuth, requireAdmin, async (req, res) 
     if (!result) {
       return res.status(404).json({ error: 'not_found' });
     }
-    try {
-      await notifyOrganizerEventRemoved({
-        to: result.orgEmail,
-        orgName: result.orgName,
-        eventTitle: result.eventTitle,
-      });
-    } catch (notifyErr) {
-      console.error('Organizer removal email failed:', notifyErr);
-    }
+    // try {
+    //   await notifyOrganizerEventRemoved({
+    //     to: result.orgEmail,
+    //     orgName: result.orgName,
+    //     eventTitle: result.eventTitle,
+    //   });
+    // } catch (notifyErr) {
+    //   console.error('Organizer removal email failed:', notifyErr);
+    // }
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
@@ -243,11 +243,42 @@ app.post('/api/events/:id/signups', requireAuth, async (req, res) => {
     const body = req.body ?? {};
     const name = String(body.name || req.auth.name || 'Volunteer').trim();
     const email = String(body.email || req.auth.email || '').trim();
+    const signupType = String(body.signupType || 'attending').trim();
     if (!email) {
       return res.status(400).json({ error: 'invalid_input', message: 'Email is required for signup.' });
     }
+
+    // If signing up to volunteer, fetch their volunteer profile
+    let volunteerProfile = null;
+    if (signupType === 'volunteering') {
+      try {
+        const profileResult = await pool.query(
+          `SELECT skills, availability, interests, experience, contact_preferences,
+                  emergency_contact_name, emergency_contact_phone
+           FROM volunteer_profiles WHERE user_id = $1`,
+          [req.auth.id]
+        );
+        if (profileResult.rows.length > 0) {
+          const profile = profileResult.rows[0];
+          volunteerProfile = {
+            skills: profile.skills || [],
+            availability: profile.availability || '',
+            interests: profile.interests || [],
+            experience: profile.experience || '',
+            contactPreferences: profile.contact_preferences || '',
+            emergencyContactName: profile.emergency_contact_name || '',
+            emergencyContactPhone: profile.emergency_contact_phone || '',
+          };
+        }
+      } catch (err) {
+        console.error('Error fetching volunteer profile:', err);
+        // Continue without profile data if there's an error
+      }
+    }
+
     const userId = req.auth.role === 'user' ? req.auth.id : null;
     const result = await createSignupForEvent(id, { name, email, userId });
+    
     if (!result.ok) {
       const status = result.error === 'not_found' ? 404 : 409;
       return res.status(status).json(result);

@@ -813,8 +813,15 @@
   text-decoration: underline;
 }
 
-.map-popup__cta {
+.map-popup__buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
   margin-top: 0.65rem;
+}
+
+.map-popup__cta {
+  margin-top: 0;
   width: 100%;
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
