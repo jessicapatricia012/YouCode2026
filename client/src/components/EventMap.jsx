@@ -3,6 +3,9 @@ import Map, { Layer, Marker, NavigationControl, Popup, Source } from 'react-map-
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { geodesicCircleFeature } from '../geo.js';
 import { EVENT_TYPE_COLORS } from '../eventTypes.js';
+import EventAddressLine from './EventAddressLine.jsx';
+import { eventAddressDisplayLine, googleMapsUrlForEvent } from '../eventLocation.js';
+import { eventsMatchingMapSearch } from '../mapEventSearch.js';
 import { SKILL_TAGS } from '../skillTags.js';
 
 const token = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
@@ -34,12 +37,41 @@ export default function EventMap({
   radiusKm,
   organizerCannotVolunteer = false,
   focusEventId,
+  /** When set (volunteer), popup skill tags highlight ids that appear on this list. */
+  volunteerProfileSkillIds,
+  searchQuery = '',
+  onSearchChange,
+  onSearchPickEvent,
 }) {
   const mapRef = useRef(null);
+  const searchWrapRef = useRef(null);
   const lastFocusedIdRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
   const [popupId, setPopupId] = useState(null);
   const [signupBusy, setSignupBusy] = useState(false);
+  const [searchDropdownOpen, setSearchDropdownOpen] = useState(false);
+
+  const searchMatches = useMemo(
+    () => eventsMatchingMapSearch(events, searchQuery, 20),
+    [events, searchQuery]
+  );
+
+  useEffect(() => {
+    if (!onSearchChange || !searchQuery.trim()) {
+      setSearchDropdownOpen(false);
+    }
+  }, [onSearchChange, searchQuery]);
+
+  useEffect(() => {
+    if (!onSearchChange) return;
+    const onDocDown = (e) => {
+      const el = searchWrapRef.current;
+      if (!el || el.contains(e.target)) return;
+      setSearchDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', onDocDown);
+    return () => document.removeEventListener('mousedown', onDocDown);
+  }, [onSearchChange]);
 
   const mappableEvents = useMemo(
     () =>
@@ -58,6 +90,24 @@ export default function EventMap({
     [events, popupId]
   );
 
+  const volunteerSkillSet = useMemo(() => {
+    if (!Array.isArray(volunteerProfileSkillIds) || volunteerProfileSkillIds.length === 0) {
+      return null;
+    }
+    return new Set(volunteerProfileSkillIds);
+  }, [volunteerProfileSkillIds]);
+
+  const popupSkillTagsOrdered = useMemo(() => {
+    const tags = popupEvent?.skillTags;
+    if (!Array.isArray(tags) || tags.length === 0) return [];
+    if (!volunteerSkillSet) return [...tags];
+    return [...tags].sort((a, b) => {
+      const ma = volunteerSkillSet.has(a) ? 0 : 1;
+      const mb = volunteerSkillSet.has(b) ? 0 : 1;
+      if (ma !== mb) return ma - mb;
+      return String(a).localeCompare(String(b));
+    });
+  }, [popupEvent, volunteerSkillSet]);
   const [signupType, setSignupType] = useState(null);
 
   const initialView = useMemo(
@@ -149,8 +199,118 @@ export default function EventMap({
     );
   }
 
+  const searchTrimmed = searchQuery.trim();
+  const showSearchDropdown =
+    Boolean(onSearchPickEvent) &&
+    Boolean(searchTrimmed) &&
+    searchDropdownOpen;
+
   return (
     <div className="map-shell">
+      {onSearchChange ? (
+        <div className="map-search" role="search">
+          <div className="map-search__inner" ref={searchWrapRef}>
+            <span className="map-search__icon" aria-hidden>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="M21 21l-4.3-4.3" />
+              </svg>
+            </span>
+            <input
+              type="search"
+              className="map-search__input"
+              placeholder="Search events, org, place, skills…"
+              value={searchQuery}
+              onChange={(e) => {
+                onSearchChange(e.target.value);
+                setSearchDropdownOpen(true);
+              }}
+              onFocus={() => setSearchDropdownOpen(true)}
+              aria-label="Search events on the map"
+              aria-expanded={showSearchDropdown}
+              aria-controls={showSearchDropdown ? 'map-search-suggestions' : undefined}
+              aria-autocomplete="list"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            {searchTrimmed ? (
+              <button
+                type="button"
+                className="map-search__clear"
+                aria-label="Clear search"
+                onClick={() => {
+                  onSearchChange('');
+                  setSearchDropdownOpen(false);
+                }}
+              >
+                ×
+              </button>
+            ) : null}
+            {showSearchDropdown ? (
+              <div
+                id="map-search-suggestions"
+                className="map-search__dropdown"
+                role="listbox"
+                aria-label="Matching events"
+              >
+                {loading ? (
+                  <div className="map-search__dropdown-status">Loading events…</div>
+                ) : error ? (
+                  <div className="map-search__dropdown-status map-search__dropdown-status--error">
+                    {error}
+                  </div>
+                ) : searchMatches.length === 0 ? (
+                  <div className="map-search__dropdown-status" role="status">
+                    No events match “{searchTrimmed}”. Try another word or clear the search.
+                  </div>
+                ) : (
+                  searchMatches.map((ev) => (
+                    <div
+                      key={ev.id}
+                      role="option"
+                      tabIndex={0}
+                      className="map-search__dropdown-item"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        onSearchPickEvent(ev.id);
+                        setSearchDropdownOpen(false);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onSearchPickEvent(ev.id);
+                          setSearchDropdownOpen(false);
+                        }
+                      }}
+                    >
+                      <span className="map-search__dropdown-title">{ev.title}</span>
+                      <span className="map-search__dropdown-sub">
+                        {[ev.orgName, ev.city].filter(Boolean).join(' · ') || '—'}
+                      </span>
+                      <EventAddressLine
+                        ev={ev}
+                        className="map-search__dropdown-addr"
+                        linkClassName="map-search__dropdown-addr-link"
+                        onLinkClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       {loading && <div className="map-overlay">Loading events…</div>}
       {error && <div className="map-overlay map-overlay--error">{error}</div>}
       <Map
@@ -229,9 +389,18 @@ export default function EventMap({
             <div className="map-popup">
               <h3 className="map-popup__title">{popupEvent.title}</h3>
               <p className="map-popup__org">{popupEvent.orgName}</p>
-              <p className="map-popup__meta">
-                {[popupEvent.address, popupEvent.city].filter(Boolean).join(', ') || '—'}
-              </p>
+              {eventAddressDisplayLine(popupEvent) || googleMapsUrlForEvent(popupEvent) ? (
+                <EventAddressLine
+                  ev={popupEvent}
+                  userCoords={userCoords}
+                  showDistance
+                  className="map-popup__address"
+                  linkClassName="map-popup__address-link"
+                  distanceClassName="map-popup__distance"
+                />
+              ) : (
+                <p className="map-popup__meta">—</p>
+              )}
               <p className="map-popup__meta">{formatEventDate(popupEvent.startsAt)}</p>
               <p className="map-popup__meta">
                 {popupEvent.spotsLeft > 0
@@ -251,12 +420,28 @@ export default function EventMap({
                   </a>
                 </p>
               ) : null}
-              {popupEvent.skillTags?.length > 0 ? (
-                <p className="map-popup__meta map-popup__skill-tags">
-                  {popupEvent.skillTags
-                    .map((id) => SKILL_TAGS.find((t) => t.id === id)?.label ?? id)
-                    .join(' · ')}
-                </p>
+              {popupSkillTagsOrdered.length > 0 ? (
+                <div className="map-popup__skill-tag-row" role="list" aria-label="Skills needed">
+                  {popupSkillTagsOrdered.map((id) => {
+                    const isMatch = volunteerSkillSet?.has(id) ?? false;
+                    return (
+                      <span
+                        key={id}
+                        className={`map-popup__skill-tag${isMatch ? ' map-popup__skill-tag--match' : ''}`}
+                        role="listitem"
+                        title={
+                          volunteerSkillSet
+                            ? isMatch
+                              ? 'On your profile'
+                              : 'Not on your profile'
+                            : undefined
+                        }
+                      >
+                        {SKILL_TAGS.find((t) => t.id === id)?.label ?? id}
+                      </span>
+                    );
+                  })}
+                </div>
               ) : null}
               {!organizerCannotVolunteer ? (
                 <div className="map-popup__buttons">

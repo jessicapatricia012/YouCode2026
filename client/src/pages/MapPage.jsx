@@ -27,6 +27,7 @@ export default function MapPage() {
   const [error, setError] = useState(null);
   const [userCoords, setUserCoords] = useState(null);
   const [radiusStepIndex, setRadiusStepIndex] = useState(0);
+  const [mapSearchQuery, setMapSearchQuery] = useState('');
 
   /** Skill-based recommendations for visitors (sidebar “For you”). */
   const [skillRecs, setSkillRecs] = useState({
@@ -231,6 +232,18 @@ export default function MapPage() {
     return list;
   }, [events, radiusLimitKm, userCoords, focusEventId]);
 
+  const pickSearchEvent = useCallback(
+    (eventId) => {
+      setMapSearchQuery('');
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('event', eventId);
+        return next;
+      });
+    },
+    [setSearchParams]
+  );
+
   const onToggleType = useCallback((type) => {
     setIncludedTypes((prev) =>
       prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
@@ -258,11 +271,16 @@ export default function MapPage() {
         const msg =
           data.error === 'full'
             ? 'This event is full.'
-            : r.status === 404
-              ? 'Event not found.'
-              : r.status === 401
-                ? 'Please sign in again.'
-                : 'Signup failed.';
+            : data.error === 'already_signed_up'
+              ? 'You are already signed up for this event.'
+              : r.status === 404
+                ? 'Event not found.'
+                : r.status === 401
+                  ? 'Please sign in again.'
+                  : data.message ||
+                    (r.status === 400
+                      ? 'Signup could not be completed. Check your details and try again.'
+                      : `Signup failed (${r.status}).`);
         window.alert(msg);
         return;
       }
@@ -309,6 +327,12 @@ export default function MapPage() {
         radiusKm={radiusKmForCircle}
         organizerCannotVolunteer={user?.role === 'organizer'}
         focusEventId={focusEventId || undefined}
+        volunteerProfileSkillIds={
+          user?.role === 'user' ? skillRecs.profileSkills ?? [] : undefined
+        }
+        searchQuery={mapSearchQuery}
+        onSearchChange={setMapSearchQuery}
+        onSearchPickEvent={pickSearchEvent}
       />
     </div>
   );

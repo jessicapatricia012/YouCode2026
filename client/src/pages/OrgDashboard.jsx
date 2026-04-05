@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import EventAddressLine from '../components/EventAddressLine.jsx';
 import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS } from '../eventTypes.js';
+import { SKILL_TAGS } from '../skillTags.js';
 import './OrgDashboard.css';
+
+function skillLabel(id) {
+  return SKILL_TAGS.find((t) => t.id === id)?.label ?? id;
+}
 
 function formatEventDate(iso) {
   if (!iso) return '—';
@@ -43,12 +50,17 @@ export default function OrgDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
   const [signupModal, setSignupModal] = useState(null);
   const [signupsLoading, setSignupsLoading] = useState(false);
   const [signupsError, setSignupsError] = useState(null);
   const [signupsList, setSignupsList] = useState([]);
   const [signupsTotal, setSignupsTotal] = useState(0);
+  const [profileViewUserId, setProfileViewUserId] = useState(null);
+  const [volunteerProfile, setVolunteerProfile] = useState(null);
+  const [volunteerProfileLoading, setVolunteerProfileLoading] = useState(false);
+  const [volunteerProfileError, setVolunteerProfileError] = useState(null);
 
   const orgId = user?.id;
 
@@ -98,6 +110,9 @@ export default function OrgDashboard() {
 
   useEffect(() => {
     if (!signupModal) return;
+    setProfileViewUserId(null);
+    setVolunteerProfile(null);
+    setVolunteerProfileError(null);
     let cancelled = false;
     setSignupsLoading(true);
     setSignupsError(null);
@@ -134,13 +149,59 @@ export default function OrgDashboard() {
   }, [signupModal, getAuthHeader]);
 
   useEffect(() => {
+    if (!signupModal || !profileViewUserId) {
+      setVolunteerProfileLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setVolunteerProfile(null);
+    setVolunteerProfileError(null);
+    setVolunteerProfileLoading(true);
+
+    (async () => {
+      try {
+        const r = await fetch(
+          `/api/events/${signupModal.id}/volunteers/${profileViewUserId}/profile`,
+          { headers: getAuthHeader() }
+        );
+        const data = await r.json().catch(() => ({}));
+        if (cancelled) return;
+        if (r.status === 401) {
+          setVolunteerProfileError('Session expired. Sign in again.');
+          return;
+        }
+        if (!r.ok) {
+          setVolunteerProfileError(data.message || 'Could not load profile.');
+          return;
+        }
+        setVolunteerProfile(data);
+      } catch {
+        if (!cancelled) setVolunteerProfileError('Could not load profile.');
+      } finally {
+        if (!cancelled) setVolunteerProfileLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [signupModal, profileViewUserId, getAuthHeader]);
+
+  const closeSignupModal = useCallback(() => {
+    setSignupModal(null);
+    setProfileViewUserId(null);
+    setVolunteerProfile(null);
+    setVolunteerProfileError(null);
+  }, []);
+
+  useEffect(() => {
     if (!signupModal) return;
     function onKey(e) {
-      if (e.key === 'Escape') setSignupModal(null);
+      if (e.key === 'Escape') closeSignupModal();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [signupModal]);
+  }, [signupModal, closeSignupModal]);
 
   const stats = useMemo(() => {
     const totalEvents = events.length;
@@ -149,8 +210,7 @@ export default function OrgDashboard() {
     return { totalEvents, totalSignups, activeEvents };
   }, [events]);
 
-  async function handleDelete(eventId, title) {
-    if (!window.confirm(`Delete “${title}”? This cannot be undone.`)) return;
+  async function performDeleteEvent(eventId) {
     setDeletingId(eventId);
     setError(null);
     try {
@@ -270,6 +330,11 @@ export default function OrgDashboard() {
                       >
                         {ev.title}
                       </button>
+                      <EventAddressLine
+                        ev={ev}
+                        className="org-dashboard__event-addr"
+                        linkClassName="org-dashboard__event-addr-link"
+                      />
                     </td>
                     <td>
                       <span
@@ -312,7 +377,7 @@ export default function OrgDashboard() {
                             type="button"
                             className="org-dashboard__link-btn org-dashboard__link-btn--danger"
                             disabled={deletingId === ev.id}
-                            onClick={() => handleDelete(ev.id, ev.title)}
+                            onClick={() => setDeleteConfirm({ eventId: ev.id, title: ev.title })}
                           >
                             {deletingId === ev.id ? 'Deleting…' : 'Delete'}
                           </button>
@@ -328,7 +393,7 @@ export default function OrgDashboard() {
                               type="button"
                               className="org-dashboard__link-btn org-dashboard__link-btn--danger"
                               disabled={deletingId === ev.id}
-                              onClick={() => handleDelete(ev.id, ev.title)}
+                              onClick={() => setDeleteConfirm({ eventId: ev.id, title: ev.title })}
                             >
                               {deletingId === ev.id ? 'Deleting…' : 'Delete'}
                             </button>
@@ -347,8 +412,8 @@ export default function OrgDashboard() {
       {signupModal && (
         <div
           className="org-dashboard__modal-backdrop"
-          onClick={() => setSignupModal(null)}
-          onKeyDown={(e) => e.key === 'Escape' && setSignupModal(null)}
+          onClick={closeSignupModal}
+          onKeyDown={(e) => e.key === 'Escape' && closeSignupModal()}
           role="presentation"
         >
           <div
@@ -360,26 +425,112 @@ export default function OrgDashboard() {
           >
             <div className="org-dashboard__modal-head">
               <h2 id="org-dashboard-signups-title" className="org-dashboard__modal-title">
-                Signups
+                {profileViewUserId ? 'Volunteer profile' : 'Signups'}
               </h2>
               <button
                 type="button"
                 className="org-dashboard__modal-close"
                 aria-label="Close"
-                onClick={() => setSignupModal(null)}
+                onClick={closeSignupModal}
               >
                 ×
               </button>
             </div>
             <p className="org-dashboard__modal-event">{signupModal.title}</p>
-            {signupsLoading && (
-              <p className="org-dashboard__muted">Loading signups…</p>
-            )}
-            {signupsError && (
-              <p className="org-dashboard__modal-error">{signupsError}</p>
-            )}
-            {!signupsLoading && !signupsError && (
+
+            {profileViewUserId ? (
               <>
+                <button
+                  type="button"
+                  className="org-dashboard__profile-back"
+                  aria-label="Back to signups list for this event"
+                  onClick={() => {
+                    setProfileViewUserId(null);
+                    setVolunteerProfile(null);
+                    setVolunteerProfileError(null);
+                  }}
+                >
+                  <span className="org-dashboard__profile-back-arrow" aria-hidden>
+                    ←
+                  </span>
+                  All signups
+                </button>
+                {volunteerProfileLoading && (
+                  <p className="org-dashboard__muted">Loading profile…</p>
+                )}
+                {volunteerProfileError && (
+                  <p className="org-dashboard__modal-error">{volunteerProfileError}</p>
+                )}
+                {!volunteerProfileLoading && !volunteerProfileError && volunteerProfile && (
+                  <div className="org-dashboard__volunteer-profile">
+                    <p className="org-dashboard__volunteer-profile-line">
+                      <span className="org-dashboard__volunteer-profile-label">Account name</span>
+                      {volunteerProfile.displayName || '—'}
+                    </p>
+                    <p className="org-dashboard__volunteer-profile-line">
+                      <span className="org-dashboard__volunteer-profile-label">Account email</span>
+                      {volunteerProfile.email ? (
+                        <a href={`mailto:${volunteerProfile.email}`}>{volunteerProfile.email}</a>
+                      ) : (
+                        '—'
+                      )}
+                    </p>
+                    <div className="org-dashboard__volunteer-profile-block">
+                      <span className="org-dashboard__volunteer-profile-label">Skills</span>
+                      {Array.isArray(volunteerProfile.skills) &&
+                      volunteerProfile.skills.length > 0 ? (
+                        <div className="org-dashboard__skill-tags" role="list">
+                          {volunteerProfile.skills.map((id) => (
+                            <span key={id} className="org-dashboard__skill-tag" role="listitem">
+                              {skillLabel(id)}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="org-dashboard__muted org-dashboard__muted--inline">None listed</p>
+                      )}
+                    </div>
+                    <div className="org-dashboard__volunteer-profile-block">
+                      <span className="org-dashboard__volunteer-profile-label">Availability</span>
+                      <p className="org-dashboard__volunteer-profile-text">
+                        {volunteerProfile.availability?.trim() || '—'}
+                      </p>
+                    </div>
+                    <div className="org-dashboard__volunteer-profile-block">
+                      <span className="org-dashboard__volunteer-profile-label">Interests</span>
+                      {Array.isArray(volunteerProfile.interests) &&
+                      volunteerProfile.interests.filter(Boolean).length > 0 ? (
+                        <ul className="org-dashboard__volunteer-list">
+                          {volunteerProfile.interests.filter(Boolean).map((t, i) => (
+                            <li key={i}>{t}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="org-dashboard__muted org-dashboard__muted--inline">—</p>
+                      )}
+                    </div>
+                    <div className="org-dashboard__volunteer-profile-block">
+                      <span className="org-dashboard__volunteer-profile-label">Experience</span>
+                      <p className="org-dashboard__volunteer-profile-text">
+                        {volunteerProfile.experience?.trim() || '—'}
+                      </p>
+                    </div>
+                    <div className="org-dashboard__volunteer-profile-block">
+                      <span className="org-dashboard__volunteer-profile-label">
+                        Contact preferences
+                      </span>
+                      <p className="org-dashboard__volunteer-profile-text">
+                        {volunteerProfile.contactPreferences?.trim() || '—'}
+                      </p>
+                    </div>
+                    <div className="org-dashboard__volunteer-profile-block">
+                      <span className="org-dashboard__volunteer-profile-label">Emergency contact</span>
+                      <p className="org-dashboard__volunteer-profile-text">
+                        {[volunteerProfile.emergencyContactName, volunteerProfile.emergencyContactPhone]
+                          .filter(Boolean)
+                          .join(' · ') || '—'}
+                      </p>
+                    </div>
                 <p className="org-dashboard__modal-count">
                   Total: <strong>{signupsTotal}</strong>
                 </p>
@@ -474,10 +625,94 @@ export default function OrgDashboard() {
                   </div>
                 )}
               </>
+            ) : (
+              <>
+                {signupsLoading && (
+                  <p className="org-dashboard__muted">Loading signups…</p>
+                )}
+                {signupsError && (
+                  <p className="org-dashboard__modal-error">{signupsError}</p>
+                )}
+                {!signupsLoading && !signupsError && (
+                  <>
+                    <p className="org-dashboard__modal-count">
+                      Total: <strong>{signupsTotal}</strong>
+                    </p>
+                    <p className="org-dashboard__modal-footnote">
+                      “View profile” is available when the signup email matches a volunteer account
+                      (including signups from before accounts were linked on the server).
+                    </p>
+                    {signupsList.length === 0 ? (
+                      <p className="org-dashboard__muted">No signups yet.</p>
+                    ) : (
+                      <div className="org-dashboard__modal-table-wrap">
+                        <table className="org-dashboard__modal-table">
+                          <thead>
+                            <tr>
+                              <th>Name</th>
+                              <th>Email</th>
+                              <th>Signed up</th>
+                              <th>Profile</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {signupsList.map((s) => (
+                              <tr key={s.id}>
+                                <td>{s.name}</td>
+                                <td>
+                                  <a href={`mailto:${s.email}`}>{s.email}</a>
+                                </td>
+                                <td>{formatSignupDate(s.signedUpAt)}</td>
+                                <td>
+                                  {s.profileUserId || s.userId ? (
+                                    <button
+                                      type="button"
+                                      className="org-dashboard__link-btn"
+                                      onClick={() =>
+                                        setProfileViewUserId(s.profileUserId || s.userId)
+                                      }
+                                    >
+                                      View profile
+                                    </button>
+                                  ) : (
+                                    <span className="org-dashboard__muted org-dashboard__muted--inline">
+                                      —
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
             )}
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        title="Delete this event?"
+        description={
+          deleteConfirm
+            ? `Delete “${deleteConfirm.title}”? This cannot be undone.`
+            : ''
+        }
+        cancelLabel="Keep event"
+        confirmLabel="Delete"
+        confirmVariant="danger"
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={() => {
+          if (!deleteConfirm) return;
+          const id = deleteConfirm.eventId;
+          setDeleteConfirm(null);
+          void performDeleteEvent(id);
+        }}
+      />
     </div>
   );
 }

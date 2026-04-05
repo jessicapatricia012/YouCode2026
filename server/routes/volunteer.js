@@ -1,10 +1,72 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
 import { requireAuth } from '../middleware/requireAuth.js';
-import { listRecommendedEventsForVolunteer, parseTypesQuery } from '../src/eventsDb.js';
+import {
+  cancelVolunteerSignupForEvent,
+  listRecommendedEventsForVolunteer,
+  listSignupsForVolunteer,
+  parseTypesQuery,
+} from '../src/eventsDb.js';
 import { normalizeSkillTags } from '../src/skillTags.js';
 
 const router = Router();
+
+/** GET /api/volunteer/signups — events this volunteer has signed up for. */
+router.get('/signups', requireAuth, async (req, res) => {
+  try {
+    if (req.auth.role !== 'user') {
+      return res.status(403).json({
+        error: 'forbidden',
+        message: 'Only visitors can list their signups.',
+      });
+    }
+    const result = await listSignupsForVolunteer(req.auth.id, req.auth.email);
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: 'server_error',
+      message: 'Could not load signups. Try again in a moment.',
+    });
+  }
+});
+
+/** DELETE /api/volunteer/signups/:eventId — cancel own signup for that event. */
+router.delete('/signups/:eventId', requireAuth, async (req, res) => {
+  try {
+    if (req.auth.role !== 'user') {
+      return res.status(403).json({
+        error: 'forbidden',
+        message: 'Only visitors can cancel signups.',
+      });
+    }
+    const { eventId } = req.params;
+    const result = await cancelVolunteerSignupForEvent(
+      eventId,
+      req.auth.id,
+      req.auth.email
+    );
+    if (!result.ok) {
+      return res.status(404).json({
+        error: 'not_found',
+        message: 'No signup found for this event on your account.',
+      });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    if (err.code === '22P02') {
+      return res.status(400).json({
+        error: 'invalid_input',
+        message: 'Invalid event id.',
+      });
+    }
+    res.status(500).json({
+      error: 'server_error',
+      message: 'Could not cancel signup. Try again in a moment.',
+    });
+  }
+});
 
 /** GET /api/volunteer/recommendations — events matching profile skills (visitors only). */
 router.get('/recommendations', requireAuth, async (req, res) => {

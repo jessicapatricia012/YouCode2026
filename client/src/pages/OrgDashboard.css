@@ -286,6 +286,24 @@
   color: var(--connectbc-brand-hover);
 }
 
+.org-dashboard__event-addr {
+  margin: 0.35rem 0 0;
+  max-width: 18rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #52525b;
+}
+
+.org-dashboard__event-addr-link {
+  font-weight: 600;
+  color: var(--connectbc-brand);
+  text-decoration: none;
+}
+
+.org-dashboard__event-addr-link:hover {
+  text-decoration: underline;
+}
+
 .org-dashboard__modal-backdrop {
   position: fixed;
   inset: 0;
@@ -396,6 +414,116 @@
   color: var(--connectbc-brand);
 }
 
+.org-dashboard__modal-footnote {
+  margin: 0 0 0.65rem;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #71717a;
+}
+
+.org-dashboard__muted--inline {
+  margin: 0;
+  display: inline;
+}
+
+.org-dashboard__profile-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 1rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid #d4d4d8;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #3f3f46;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.org-dashboard__profile-back:hover {
+  background: #fafafa;
+  border-color: var(--connectbc-brand);
+  color: var(--connectbc-brand);
+}
+
+.org-dashboard__profile-back-arrow {
+  font-size: 1rem;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+.org-dashboard__volunteer-profile {
+  font-size: 0.875rem;
+  line-height: 1.45;
+  max-height: min(55vh, 420px);
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.org-dashboard__volunteer-profile-line {
+  margin: 0 0 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.org-dashboard__volunteer-profile-block {
+  margin: 0 0 0.75rem;
+}
+
+.org-dashboard__volunteer-profile-block:last-child {
+  margin-bottom: 0;
+}
+
+.org-dashboard__volunteer-profile-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #71717a;
+  margin-bottom: 0.25rem;
+}
+
+.org-dashboard__volunteer-profile-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #3f3f46;
+}
+
+.org-dashboard__skill-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.org-dashboard__skill-tag {
+  display: inline-block;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25;
+  border-radius: 999px;
+  border: 1px solid #6ee7b7;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.org-dashboard__volunteer-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #3f3f46;
+}
+
+.org-dashboard__volunteer-list li {
+  margin-bottom: 0.2rem;
 .org-dashboard__signup-type {
   display: inline-block;
   padding: 0.25rem 0.5rem;

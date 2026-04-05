@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import EventAddressLine from '../components/EventAddressLine.jsx';
 import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS } from '../eventTypes.js';
+import { eventAddressDisplayLine, googleMapsUrlForEvent } from '../eventLocation.js';
 import './AdminPage.css';
 
 function formatWhen(iso) {
@@ -25,6 +28,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [removingId, setRemovingId] = useState(null);
+  const [removeConfirm, setRemoveConfirm] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,14 +60,7 @@ export default function AdminPage() {
     load();
   }, [load]);
 
-  async function handleRemove(ev) {
-    if (
-      !window.confirm(
-        `Remove “${ev.title}” from the public map? The organizer will be emailed if SMTP is configured.`
-      )
-    ) {
-      return;
-    }
+  async function performRemove(ev) {
     setRemovingId(ev.id);
     setError(null);
     try {
@@ -168,9 +165,15 @@ export default function AdminPage() {
                           ) : null}
                         </div>
                       </div>
-                      <p className="admin-page__sub">
-                        {[ev.address, ev.city].filter(Boolean).join(', ') || '—'}
-                      </p>
+                      {eventAddressDisplayLine(ev) || googleMapsUrlForEvent(ev) ? (
+                        <EventAddressLine
+                          ev={ev}
+                          className="admin-page__address"
+                          linkClassName="admin-page__address-link"
+                        />
+                      ) : (
+                        <p className="admin-page__sub">—</p>
+                      )}
                     </td>
                     <td>
                       <div className="admin-page__org-name">{ev.orgName}</div>
@@ -207,7 +210,7 @@ export default function AdminPage() {
                           type="button"
                           className="admin-page__remove-btn"
                           disabled={removingId === ev.id}
-                          onClick={() => handleRemove(ev)}
+                          onClick={() => setRemoveConfirm(ev)}
                         >
                           {removingId === ev.id ? 'Removing…' : 'Remove'}
                         </button>
@@ -220,6 +223,26 @@ export default function AdminPage() {
           </div>
         )}
       </section>
+
+      <ConfirmDialog
+        open={!!removeConfirm}
+        title="Remove from public map?"
+        description={
+          removeConfirm
+            ? `Remove “${removeConfirm.title}” from the public map? The organizer will be emailed if SMTP is configured.`
+            : ''
+        }
+        cancelLabel="Keep listing"
+        confirmLabel="Remove"
+        confirmVariant="danger"
+        onClose={() => setRemoveConfirm(null)}
+        onConfirm={() => {
+          if (!removeConfirm) return;
+          const ev = removeConfirm;
+          setRemoveConfirm(null);
+          void performRemove(ev);
+        }}
+      />
     </div>
   );
 }
