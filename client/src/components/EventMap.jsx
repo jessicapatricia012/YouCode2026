@@ -34,6 +34,8 @@ export default function EventMap({
   radiusKm,
   organizerCannotVolunteer = false,
   focusEventId,
+  /** When set (volunteer), popup skill tags highlight ids that appear on this list. */
+  volunteerProfileSkillIds,
 }) {
   const mapRef = useRef(null);
   const lastFocusedIdRef = useRef(null);
@@ -57,6 +59,25 @@ export default function EventMap({
     () => (popupId ? events.find((e) => e.id === popupId) ?? null : null),
     [events, popupId]
   );
+
+  const volunteerSkillSet = useMemo(() => {
+    if (!Array.isArray(volunteerProfileSkillIds) || volunteerProfileSkillIds.length === 0) {
+      return null;
+    }
+    return new Set(volunteerProfileSkillIds);
+  }, [volunteerProfileSkillIds]);
+
+  const popupSkillTagsOrdered = useMemo(() => {
+    const tags = popupEvent?.skillTags;
+    if (!Array.isArray(tags) || tags.length === 0) return [];
+    if (!volunteerSkillSet) return [...tags];
+    return [...tags].sort((a, b) => {
+      const ma = volunteerSkillSet.has(a) ? 0 : 1;
+      const mb = volunteerSkillSet.has(b) ? 0 : 1;
+      if (ma !== mb) return ma - mb;
+      return String(a).localeCompare(String(b));
+    });
+  }, [popupEvent, volunteerSkillSet]);
 
   const initialView = useMemo(
     () => ({
@@ -247,12 +268,28 @@ export default function EventMap({
                   </a>
                 </p>
               ) : null}
-              {popupEvent.skillTags?.length > 0 ? (
-                <p className="map-popup__meta map-popup__skill-tags">
-                  {popupEvent.skillTags
-                    .map((id) => SKILL_TAGS.find((t) => t.id === id)?.label ?? id)
-                    .join(' · ')}
-                </p>
+              {popupSkillTagsOrdered.length > 0 ? (
+                <div className="map-popup__skill-tag-row" role="list" aria-label="Skills needed">
+                  {popupSkillTagsOrdered.map((id) => {
+                    const isMatch = volunteerSkillSet?.has(id) ?? false;
+                    return (
+                      <span
+                        key={id}
+                        className={`map-popup__skill-tag${isMatch ? ' map-popup__skill-tag--match' : ''}`}
+                        role="listitem"
+                        title={
+                          volunteerSkillSet
+                            ? isMatch
+                              ? 'On your profile'
+                              : 'Not on your profile'
+                            : undefined
+                        }
+                      >
+                        {SKILL_TAGS.find((t) => t.id === id)?.label ?? id}
+                      </span>
+                    );
+                  })}
+                </div>
               ) : null}
               {!organizerCannotVolunteer ? (
                 <button

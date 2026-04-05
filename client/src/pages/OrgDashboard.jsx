@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS } from '../eventTypes.js';
 import { SKILL_TAGS } from '../skillTags.js';
 import './OrgDashboard.css';
@@ -48,6 +49,7 @@ export default function OrgDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
   const [signupModal, setSignupModal] = useState(null);
   const [signupsLoading, setSignupsLoading] = useState(false);
@@ -207,8 +209,7 @@ export default function OrgDashboard() {
     return { totalEvents, totalSignups, activeEvents };
   }, [events]);
 
-  async function handleDelete(eventId, title) {
-    if (!window.confirm(`Delete “${title}”? This cannot be undone.`)) return;
+  async function performDeleteEvent(eventId) {
     setDeletingId(eventId);
     setError(null);
     try {
@@ -370,7 +371,7 @@ export default function OrgDashboard() {
                             type="button"
                             className="org-dashboard__link-btn org-dashboard__link-btn--danger"
                             disabled={deletingId === ev.id}
-                            onClick={() => handleDelete(ev.id, ev.title)}
+                            onClick={() => setDeleteConfirm({ eventId: ev.id, title: ev.title })}
                           >
                             {deletingId === ev.id ? 'Deleting…' : 'Delete'}
                           </button>
@@ -386,7 +387,7 @@ export default function OrgDashboard() {
                               type="button"
                               className="org-dashboard__link-btn org-dashboard__link-btn--danger"
                               disabled={deletingId === ev.id}
-                              onClick={() => handleDelete(ev.id, ev.title)}
+                              onClick={() => setDeleteConfirm({ eventId: ev.id, title: ev.title })}
                             >
                               {deletingId === ev.id ? 'Deleting…' : 'Delete'}
                             </button>
@@ -436,13 +437,17 @@ export default function OrgDashboard() {
                 <button
                   type="button"
                   className="org-dashboard__profile-back"
+                  aria-label="Back to signups list for this event"
                   onClick={() => {
                     setProfileViewUserId(null);
                     setVolunteerProfile(null);
                     setVolunteerProfileError(null);
                   }}
                 >
-                  ← Back to signups
+                  <span className="org-dashboard__profile-back-arrow" aria-hidden>
+                    ←
+                  </span>
+                  All signups
                 </button>
                 {volunteerProfileLoading && (
                   <p className="org-dashboard__muted">Loading profile…</p>
@@ -468,11 +473,13 @@ export default function OrgDashboard() {
                       <span className="org-dashboard__volunteer-profile-label">Skills</span>
                       {Array.isArray(volunteerProfile.skills) &&
                       volunteerProfile.skills.length > 0 ? (
-                        <ul className="org-dashboard__volunteer-skills">
+                        <div className="org-dashboard__skill-tags" role="list">
                           {volunteerProfile.skills.map((id) => (
-                            <li key={id}>{skillLabel(id)}</li>
+                            <span key={id} className="org-dashboard__skill-tag" role="listitem">
+                              {skillLabel(id)}
+                            </span>
                           ))}
-                        </ul>
+                        </div>
                       ) : (
                         <p className="org-dashboard__muted org-dashboard__muted--inline">None listed</p>
                       )}
@@ -535,8 +542,8 @@ export default function OrgDashboard() {
                       Total: <strong>{signupsTotal}</strong>
                     </p>
                     <p className="org-dashboard__modal-footnote">
-                      “View profile” appears when the volunteer signed in with a visitor account. Older
-                      signups may not be linked.
+                      “View profile” is available when the signup email matches a volunteer account
+                      (including signups from before accounts were linked on the server).
                     </p>
                     {signupsList.length === 0 ? (
                       <p className="org-dashboard__muted">No signups yet.</p>
@@ -560,11 +567,13 @@ export default function OrgDashboard() {
                                 </td>
                                 <td>{formatSignupDate(s.signedUpAt)}</td>
                                 <td>
-                                  {s.userId ? (
+                                  {s.profileUserId || s.userId ? (
                                     <button
                                       type="button"
                                       className="org-dashboard__link-btn"
-                                      onClick={() => setProfileViewUserId(s.userId)}
+                                      onClick={() =>
+                                        setProfileViewUserId(s.profileUserId || s.userId)
+                                      }
                                     >
                                       View profile
                                     </button>
@@ -587,6 +596,26 @@ export default function OrgDashboard() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteConfirm}
+        title="Delete this event?"
+        description={
+          deleteConfirm
+            ? `Delete “${deleteConfirm.title}”? This cannot be undone.`
+            : ''
+        }
+        cancelLabel="Keep event"
+        confirmLabel="Delete"
+        confirmVariant="danger"
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={() => {
+          if (!deleteConfirm) return;
+          const id = deleteConfirm.eventId;
+          setDeleteConfirm(null);
+          void performDeleteEvent(id);
+        }}
+      />
     </div>
   );
 }

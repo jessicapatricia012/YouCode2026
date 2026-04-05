@@ -264,7 +264,10 @@ export default function MapPage() {
                 ? 'Event not found.'
                 : r.status === 401
                   ? 'Please sign in again.'
-                  : 'Signup failed.';
+                  : data.message ||
+                    (r.status === 400
+                      ? 'Signup could not be completed. Check your details and try again.'
+                      : `Signup failed (${r.status}).`);
         window.alert(msg);
         return;
       }
@@ -311,6 +314,9 @@ export default function MapPage() {
         radiusKm={radiusKmForCircle}
         organizerCannotVolunteer={user?.role === 'organizer'}
         focusEventId={focusEventId || undefined}
+        volunteerProfileSkillIds={
+          user?.role === 'user' ? skillRecs.profileSkills ?? [] : undefined
+        }
       />
     </div>
   );

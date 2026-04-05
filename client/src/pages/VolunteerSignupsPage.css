@@ -184,6 +184,14 @@
   color: #71717a;
 }
 
+.volunteer-signups-page__card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  margin-top: 0.35rem;
+}
+
 .volunteer-signups-page__card-action {
   display: inline-block;
   font-size: 0.88rem;
@@ -194,4 +202,26 @@
 
 .volunteer-signups-page__card-action:hover {
   text-decoration: underline;
+}
+
+.volunteer-signups-page__card-cancel {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: #b91c1c;
+  background: #fff;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.volunteer-signups-page__card-cancel:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #f87171;
+}
+
+.volunteer-signups-page__card-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }

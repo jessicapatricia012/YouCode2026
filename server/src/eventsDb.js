@@ -756,13 +756,38 @@ export async function listSignupsForOrgEvent(eventId, orgId) {
     ));
   }
 
-  const signups = rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    email: row.email,
-    signedUpAt: row.signed_up_at,
-    userId: row.user_id ?? null,
-  }));
+  const emailsNeedingLookup = [
+    ...new Set(
+      rows
+        .filter((r) => !(r.user_id ?? null) && r.email)
+        .map((r) => String(r.email).trim().toLowerCase())
+        .filter(Boolean)
+    ),
+  ];
+  const emailToUserId = new Map();
+  if (emailsNeedingLookup.length > 0) {
+    const { rows: uidRows } = await pool.query(
+      `SELECT id, lower(trim(email)) AS em FROM users WHERE lower(trim(email)) = ANY($1::text[])`,
+      [emailsNeedingLookup]
+    );
+    for (const ur of uidRows) {
+      emailToUserId.set(ur.em, ur.id);
+    }
+  }
+
+  const signups = rows.map((row) => {
+    const em = String(row.email || '').trim().toLowerCase();
+    const userId = row.user_id ?? null;
+    const profileUserId = userId || emailToUserId.get(em) || null;
+    return {
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      signedUpAt: row.signed_up_at,
+      userId,
+      profileUserId,
+    };
+  });
 
   return { signups, total: signups.length };
 }
@@ -868,7 +893,7 @@ export async function listSignupsForVolunteer(userId, email) {
 
 /**
  * Volunteer profile + account fields for an organizer who owns the event,
- * only if the volunteer has a signup on that event linked to user_id.
+ * only if a signup exists for this event linked by user_id or by matching signup email.
  */
 export async function getVolunteerProfileForOrgEvent(eventId, orgId, volunteerUserId) {
   const { rows: evRows } = await pool.query(
@@ -877,24 +902,36 @@ export async function getVolunteerProfileForOrgEvent(eventId, orgId, volunteerUs
   );
   if (evRows.length === 0) return null;
 
-  let suRows;
-  try {
-    ({ rows: suRows } = await pool.query(
-      'SELECT 1 FROM signups WHERE event_id = $1 AND user_id = $2',
-      [eventId, volunteerUserId]
-    ));
-  } catch (err) {
-    if (!isMissingSignupsUserIdColumn(err)) throw err;
-    return null;
-  }
-  if (suRows.length === 0) return null;
-
   const { rows: userRows } = await pool.query(
     'SELECT display_name, email FROM users WHERE id = $1',
     [volunteerUserId]
   );
   const u = userRows[0];
   if (!u) return null;
+
+  const userEmailNorm = String(u.email || '').trim().toLowerCase();
+  let linked = false;
+  try {
+    const { rows: suRows } = await pool.query(
+      `SELECT 1 FROM signups
+       WHERE event_id = $1
+         AND (
+           user_id = $2::uuid
+           OR (user_id IS NULL AND lower(trim(email)) = $3)
+         )`,
+      [eventId, volunteerUserId, userEmailNorm]
+    );
+    linked = suRows.length > 0;
+  } catch (err) {
+    if (!isMissingSignupsUserIdColumn(err)) throw err;
+    const { rows: suRows } = await pool.query(
+      `SELECT 1 FROM signups
+       WHERE event_id = $1 AND lower(trim(email)) = $2`,
+      [eventId, userEmailNorm]
+    );
+    linked = suRows.length > 0;
+  }
+  if (!linked) return null;
 
   const { rows: profRows } = await pool.query(
     `SELECT skills, availability, interests, experience, contact_preferences,
@@ -957,6 +994,8 @@ export async function createSignupForEvent(eventId, { name, email, userId }) {
         }
       } catch (err) {
         if (!isMissingSignupsUserIdColumn(err)) throw err;
+        await client.query('ROLLBACK');
+        await client.query('BEGIN');
       }
     }
     let upd;
@@ -985,10 +1024,38 @@ export async function createSignupForEvent(eventId, { name, email, userId }) {
       );
     } catch (err) {
       if (!isMissingSignupsUserIdColumn(err)) throw err;
+      /* First INSERT failed → txn aborted. Roll back the spot increment and retry without user_id. */
+      await client.query('ROLLBACK');
+      await client.query('BEGIN');
+      let updRetry;
+      try {
+        updRetry = await signupIncrementSpots(client, eventId, true);
+      } catch (e2) {
+        if (!isMissingAdminRemovedColumn(e2)) throw e2;
+        updRetry = await signupIncrementSpots(client, eventId, false);
+      }
+      if (updRetry.rowCount === 0) {
+        await client.query('ROLLBACK');
+        let ex;
+        try {
+          ex = await signupCheckActiveEvent(client, eventId, true);
+        } catch (e3) {
+          if (!isMissingAdminRemovedColumn(e3)) throw e3;
+          ex = await signupCheckActiveEvent(client, eventId, false);
+        }
+        if (ex.rowCount === 0) return { ok: false, error: 'not_found' };
+        return { ok: false, error: 'full' };
+      }
       await client.query(
         `INSERT INTO signups (event_id, name, email) VALUES ($1, $2, $3)`,
         [eventId, name, email]
       );
+      await client.query('COMMIT');
+      const row = updRetry.rows[0];
+      return {
+        ok: true,
+        spotsLeft: row.spots_total - row.spots_taken,
+      };
     }
     await client.query('COMMIT');
     const r = upd.rows[0];
@@ -997,7 +1064,57 @@ export async function createSignupForEvent(eventId, { name, email, userId }) {
       spotsLeft: r.spots_total - r.spots_taken,
     };
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
+    if (err.code === '23505') {
+      return { ok: false, error: 'already_signed_up' };
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Remove the volunteer's signup(s) for an event and decrease spots_taken accordingly.
+ */
+export async function cancelVolunteerSignupForEvent(eventId, userId, email) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let del;
+    try {
+      del = await client.query(
+        `DELETE FROM signups
+         WHERE event_id = $1
+           AND (user_id = $2::uuid OR (user_id IS NULL AND lower(trim(email)) = $3))
+         RETURNING id`,
+        [eventId, userId, normalizedEmail]
+      );
+    } catch (err) {
+      if (!isMissingSignupsUserIdColumn(err)) throw err;
+      await client.query('ROLLBACK');
+      await client.query('BEGIN');
+      del = await client.query(
+        `DELETE FROM signups
+         WHERE event_id = $1 AND lower(trim(email)) = $2
+         RETURNING id`,
+        [eventId, normalizedEmail]
+      );
+    }
+    if (del.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: 'not_found' };
+    }
+    const removed = del.rowCount;
+    await client.query(
+      `UPDATE events SET spots_taken = GREATEST(0, spots_taken - $2) WHERE id = $1`,
+      [eventId, removed]
+    );
+    await client.query('COMMIT');
+    return { ok: true };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     throw err;
   } finally {
     client.release();

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+import ConfirmDialog from '../components/ConfirmDialog.jsx';
 import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS } from '../eventTypes.js';
 import './VolunteerSignupsPage.css';
 
@@ -25,6 +26,8 @@ export default function VolunteerSignupsPage() {
   const [signups, setSignups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [cancellingEventId, setCancellingEventId] = useState(null);
+  const [cancelConfirm, setCancelConfirm] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,6 +59,51 @@ export default function VolunteerSignupsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const performCancelSignup = useCallback(
+    async (eventId) => {
+      setCancellingEventId(eventId);
+      setError(null);
+      try {
+        const r = await fetch(`/api/volunteer/signups/${encodeURIComponent(eventId)}`, {
+          method: 'DELETE',
+          headers: getAuthHeader(),
+        });
+        const text = await r.text();
+        let data = {};
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch {
+            data = { message: text.trim().slice(0, 240) };
+          }
+        }
+        if (r.status === 401) {
+          setError('Please sign in again.');
+          return;
+        }
+        if (r.status === 403) {
+          setError(data.message || 'Only volunteer accounts can cancel signups.');
+          return;
+        }
+        if (!r.ok) {
+          const msg =
+            data.message ||
+            (data.error === 'not_found'
+              ? 'No signup found for this event on your account.'
+              : `Could not cancel signup (HTTP ${r.status}).`);
+          setError(msg);
+          return;
+        }
+        setSignups((prev) => prev.filter((s) => s.eventId !== eventId));
+      } catch {
+        setError('Network error — could not reach the server. Check your connection and try again.');
+      } finally {
+        setCancellingEventId(null);
+      }
+    },
+    [getAuthHeader]
+  );
 
   const empty = useMemo(() => !loading && !error && signups.length === 0, [loading, error, signups.length]);
 
@@ -144,16 +192,46 @@ export default function VolunteerSignupsPage() {
                   </span>
                 ) : null}
               </div>
-              <Link
-                to={`/?event=${encodeURIComponent(s.eventId)}`}
-                className="volunteer-signups-page__card-action"
-              >
-                Open on map
-              </Link>
+              <div className="volunteer-signups-page__card-actions">
+                <Link
+                  to={`/?event=${encodeURIComponent(s.eventId)}`}
+                  className="volunteer-signups-page__card-action"
+                >
+                  Open on map
+                </Link>
+                <button
+                  type="button"
+                  className="volunteer-signups-page__card-cancel"
+                  disabled={cancellingEventId === s.eventId}
+                  onClick={() => setCancelConfirm({ eventId: s.eventId, title: s.title })}
+                >
+                  {cancellingEventId === s.eventId ? 'Cancelling…' : 'Cancel signup'}
+                </button>
+              </div>
             </li>
           ))}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={!!cancelConfirm}
+        title="Cancel this signup?"
+        description={
+          cancelConfirm
+            ? `You will leave “${cancelConfirm.title}”. The organizer will see you as no longer registered.`
+            : ''
+        }
+        cancelLabel="Keep signup"
+        confirmLabel="Yes, cancel signup"
+        confirmVariant="danger"
+        onClose={() => setCancelConfirm(null)}
+        onConfirm={() => {
+          if (!cancelConfirm) return;
+          const { eventId } = cancelConfirm;
+          setCancelConfirm(null);
+          void performCancelSignup(eventId);
+        }}
+      />
     </div>
   );
 }

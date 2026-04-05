@@ -409,22 +409,32 @@
 }
 
 .org-dashboard__profile-back {
-  display: inline-block;
-  margin: 0 0 0.85rem;
-  padding: 0.25rem 0;
-  border: none;
-  background: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 1rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid #d4d4d8;
+  border-radius: 8px;
+  background: #fff;
   font: inherit;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: var(--connectbc-brand);
+  color: #3f3f46;
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .org-dashboard__profile-back:hover {
-  color: var(--connectbc-brand-hover);
+  background: #fafafa;
+  border-color: var(--connectbc-brand);
+  color: var(--connectbc-brand);
+}
+
+.org-dashboard__profile-back-arrow {
+  font-size: 1rem;
+  line-height: 1;
+  opacity: 0.85;
 }
 
 .org-dashboard__volunteer-profile {
@@ -467,14 +477,33 @@
   color: #3f3f46;
 }
 
-.org-dashboard__volunteer-skills,
+.org-dashboard__skill-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.org-dashboard__skill-tag {
+  display: inline-block;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25;
+  border-radius: 999px;
+  border: 1px solid #6ee7b7;
+  background: #ecfdf5;
+  color: #047857;
+}
+
 .org-dashboard__volunteer-list {
   margin: 0;
   padding-left: 1.1rem;
   color: #3f3f46;
 }
 
-.org-dashboard__volunteer-skills li,
 .org-dashboard__volunteer-list li {
   margin-bottom: 0.2rem;
 }

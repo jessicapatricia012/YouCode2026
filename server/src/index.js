@@ -255,7 +255,10 @@ app.post('/api/events/:id/signups', requireAuth, async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'server_error' });
+    res.status(500).json({
+      error: 'server_error',
+      message: 'Signup could not be completed. Try again in a moment.',
+    });
   }
 });
 
