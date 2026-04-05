@@ -767,12 +767,6 @@ export async function listSignupsForOrgEvent(eventId, orgId) {
   return { signups, total: signups.length };
 }
 
-async function signupIncrementSpots(client, eventId, useAdminRemovedFilter) {
-  const adminClause = useAdminRemovedFilter
-    ? '\n         AND admin_removed_at IS NULL'
-    : '';
-  return client.query(
-    `UPDATE events
 export async function createSignupForEvent(eventId, { name, email, signupType = 'attending', volunteerProfile = null }) {
   const client = await pool.connect();
   try {
@@ -781,41 +775,17 @@ export async function createSignupForEvent(eventId, { name, email, signupType = 
       `UPDATE events
        SET spots_taken = spots_taken + 1
        WHERE id = $1
-         AND is_active = true${adminClause}
+         AND is_active = true
          AND spots_taken < spots_total
        RETURNING spots_total, spots_taken`,
-    [eventId]
-  );
-}
-
-async function signupCheckActiveEvent(client, eventId, useAdminRemovedFilter) {
-  const adminClause = useAdminRemovedFilter ? ' AND admin_removed_at IS NULL' : '';
-  return client.query(
-    `SELECT 1 FROM events WHERE id = $1 AND is_active = true${adminClause}`,
-    [eventId]
-  );
-}
-
-export async function createSignupForEvent(eventId, { name, email }) {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    let upd;
-    try {
-      upd = await signupIncrementSpots(client, eventId, true);
-    } catch (err) {
-      if (!isMissingAdminRemovedColumn(err)) throw err;
-      upd = await signupIncrementSpots(client, eventId, false);
-    }
+      [eventId]
+    );
     if (upd.rowCount === 0) {
       await client.query('ROLLBACK');
-      let ex;
-      try {
-        ex = await signupCheckActiveEvent(client, eventId, true);
-      } catch (err) {
-        if (!isMissingAdminRemovedColumn(err)) throw err;
-        ex = await signupCheckActiveEvent(client, eventId, false);
-      }
+      const ex = await client.query(
+        'SELECT 1 FROM events WHERE id = $1 AND is_active = true',
+        [eventId]
+      );
       if (ex.rowCount === 0) return { ok: false, error: 'not_found' };
       return { ok: false, error: 'full' };
     }

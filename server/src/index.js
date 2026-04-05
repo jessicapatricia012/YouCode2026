@@ -21,7 +21,7 @@ import {
   adminRemoveEventById,
   listAllEventsForAdmin,
 } from './adminEventsDb.js';
-import { notifyOrganizerEventRemoved } from './notifyEmail.js';
+// import { notifyOrganizerEventRemoved } from './notifyEmail.js';
 import { suggestCityForStreetLine } from './geocode.js';
 
 const app = express();
@@ -59,15 +59,15 @@ app.delete('/api/admin/events/:id', requireAuth, requireAdmin, async (req, res) 
     if (!result) {
       return res.status(404).json({ error: 'not_found' });
     }
-    try {
-      await notifyOrganizerEventRemoved({
-        to: result.orgEmail,
-        orgName: result.orgName,
-        eventTitle: result.eventTitle,
-      });
-    } catch (notifyErr) {
-      console.error('Organizer removal email failed:', notifyErr);
-    }
+    // try {
+    //   await notifyOrganizerEventRemoved({
+    //     to: result.orgEmail,
+    //     orgName: result.orgName,
+    //     eventTitle: result.eventTitle,
+    //   });
+    // } catch (notifyErr) {
+    //   console.error('Organizer removal email failed:', notifyErr);
+    // }
     res.json({ ok: true });
   } catch (err) {
     console.error(err);

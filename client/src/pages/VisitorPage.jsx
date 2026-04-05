@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import SkillTagPicker from '../components/SkillTagPicker.jsx';
