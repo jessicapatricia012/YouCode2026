@@ -153,6 +153,26 @@
   color: #52525b;
 }
 
+.volunteer-signups-page__card-addr {
+  margin: 0 0 0.4rem;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: #3f3f46;
+}
+
+.volunteer-signups-page__card-addr-link {
+  font-weight: 650;
+  color: var(--connectbc-brand, #214bb2);
+  text-decoration: none;
+  background: linear-gradient(transparent 60%, rgba(33, 75, 178, 0.12) 60%);
+  border-radius: 2px;
+}
+
+.volunteer-signups-page__card-addr-link:hover {
+  text-decoration: underline;
+  background: none;
+}
+
 .volunteer-signups-page__card-meta,
 .volunteer-signups-page__card-signedup {
   margin: 0 0 0.35rem;

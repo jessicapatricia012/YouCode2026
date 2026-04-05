@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import EventAddressLine from '../components/EventAddressLine.jsx';
 import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS } from '../eventTypes.js';
 import { SKILL_TAGS } from '../skillTags.js';
 import './OrgDashboard.css';
@@ -329,6 +330,11 @@ export default function OrgDashboard() {
                       >
                         {ev.title}
                       </button>
+                      <EventAddressLine
+                        ev={ev}
+                        className="org-dashboard__event-addr"
+                        linkClassName="org-dashboard__event-addr-link"
+                      />
                     </td>
                     <td>
                       <span

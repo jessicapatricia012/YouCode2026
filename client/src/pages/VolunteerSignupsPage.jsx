@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import EventAddressLine from '../components/EventAddressLine.jsx';
 import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS } from '../eventTypes.js';
 import './VolunteerSignupsPage.css';
 
@@ -168,9 +169,13 @@ export default function VolunteerSignupsPage() {
                 </span>
               </div>
               <p className="volunteer-signups-page__card-org">{s.orgName}</p>
+              <EventAddressLine
+                ev={s}
+                className="volunteer-signups-page__card-addr"
+                linkClassName="volunteer-signups-page__card-addr-link"
+              />
               <p className="volunteer-signups-page__card-meta">
                 {formatStartsAt(s.startsAt)}
-                {s.city ? ` · ${s.city}` : ''}
                 {s.spotsLeft > 0
                   ? ` · ${s.spotsLeft} spot${s.spotsLeft === 1 ? '' : 's'} left`
                   : ' · Full'}

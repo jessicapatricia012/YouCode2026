@@ -3,6 +3,8 @@ import Map, { Layer, Marker, NavigationControl, Popup, Source } from 'react-map-
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { geodesicCircleFeature } from '../geo.js';
 import { EVENT_TYPE_COLORS } from '../eventTypes.js';
+import EventAddressLine from './EventAddressLine.jsx';
+import { eventAddressDisplayLine, googleMapsUrlForEvent } from '../eventLocation.js';
 import { eventsMatchingMapSearch } from '../mapEventSearch.js';
 import { SKILL_TAGS } from '../skillTags.js';
 
@@ -270,22 +272,35 @@ export default function EventMap({
                   </div>
                 ) : (
                   searchMatches.map((ev) => (
-                    <button
+                    <div
                       key={ev.id}
-                      type="button"
                       role="option"
+                      tabIndex={0}
                       className="map-search__dropdown-item"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => {
                         onSearchPickEvent(ev.id);
                         setSearchDropdownOpen(false);
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onSearchPickEvent(ev.id);
+                          setSearchDropdownOpen(false);
+                        }
+                      }}
                     >
                       <span className="map-search__dropdown-title">{ev.title}</span>
                       <span className="map-search__dropdown-sub">
                         {[ev.orgName, ev.city].filter(Boolean).join(' · ') || '—'}
                       </span>
-                    </button>
+                      <EventAddressLine
+                        ev={ev}
+                        className="map-search__dropdown-addr"
+                        linkClassName="map-search__dropdown-addr-link"
+                        onLinkClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
                   ))
                 )}
               </div>
@@ -371,9 +386,18 @@ export default function EventMap({
             <div className="map-popup">
               <h3 className="map-popup__title">{popupEvent.title}</h3>
               <p className="map-popup__org">{popupEvent.orgName}</p>
-              <p className="map-popup__meta">
-                {[popupEvent.address, popupEvent.city].filter(Boolean).join(', ') || '—'}
-              </p>
+              {eventAddressDisplayLine(popupEvent) || googleMapsUrlForEvent(popupEvent) ? (
+                <EventAddressLine
+                  ev={popupEvent}
+                  userCoords={userCoords}
+                  showDistance
+                  className="map-popup__address"
+                  linkClassName="map-popup__address-link"
+                  distanceClassName="map-popup__distance"
+                />
+              ) : (
+                <p className="map-popup__meta">—</p>
+              )}
               <p className="map-popup__meta">{formatEventDate(popupEvent.startsAt)}</p>
               <p className="map-popup__meta">
                 {popupEvent.spotsLeft > 0

@@ -5,6 +5,7 @@ import {
   EVENT_TYPE_COLORS,
   EVENT_TYPE_LABELS,
 } from '../eventTypes.js';
+import EventAddressLine from './EventAddressLine.jsx';
 import { SKILL_TAGS } from '../skillTags.js';
 import { RADIUS_SLIDER_STEPS_KM, radiusStepLabel } from '../mapRadius.js';
 
@@ -222,7 +223,7 @@ export default function FilterSidebar({
                         })
                       : [];
                     return (
-                      <li key={ev.id}>
+                      <li key={ev.id} className="sidebar__match-item">
                         <button
                           type="button"
                           className="sidebar__match-btn"
@@ -250,6 +251,11 @@ export default function FilterSidebar({
                             </span>
                           ) : null}
                         </button>
+                        <EventAddressLine
+                          ev={ev}
+                          className="sidebar__match-addr"
+                          linkClassName="sidebar__match-addr-link"
+                        />
                       </li>
                     );
                   })}

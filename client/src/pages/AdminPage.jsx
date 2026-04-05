@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import EventAddressLine from '../components/EventAddressLine.jsx';
 import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS } from '../eventTypes.js';
+import { eventAddressDisplayLine, googleMapsUrlForEvent } from '../eventLocation.js';
 import './AdminPage.css';
 
 function formatWhen(iso) {
@@ -163,9 +165,15 @@ export default function AdminPage() {
                           ) : null}
                         </div>
                       </div>
-                      <p className="admin-page__sub">
-                        {[ev.address, ev.city].filter(Boolean).join(', ') || '—'}
-                      </p>
+                      {eventAddressDisplayLine(ev) || googleMapsUrlForEvent(ev) ? (
+                        <EventAddressLine
+                          ev={ev}
+                          className="admin-page__address"
+                          linkClassName="admin-page__address-link"
+                        />
+                      ) : (
+                        <p className="admin-page__sub">—</p>
+                      )}
                     </td>
                     <td>
                       <div className="admin-page__org-name">{ev.orgName}</div>
