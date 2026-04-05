@@ -33,6 +33,13 @@ function isMissingAdminRemovedColumn(err) {
   );
 }
 
+/** PostgreSQL undefined_column when `signups.user_id` was never migrated. */
+function isMissingSignupsUserIdColumn(err) {
+  return (
+    err?.code === '42703' && /user_id/i.test(String(err.message ?? ''))
+  );
+}
+
 function buildListEventsQuery(includeSkillTags, includeAdminRemovedFilter, typesFilter) {
   const skillLine = includeSkillTags ? '      e.skill_tags,\n' : '';
   let sql = `
@@ -725,24 +732,190 @@ export async function listSignupsForOrgEvent(eventId, orgId) {
   );
   if (!own.rowCount) return null;
 
-  const { rows } = await pool.query(
-    `
-    SELECT id, name, email, signed_up_at
-    FROM signups
-    WHERE event_id = $1
-    ORDER BY signed_up_at ASC
-    `,
-    [eventId]
-  );
+  let rows;
+  try {
+    ({ rows } = await pool.query(
+      `
+      SELECT id, name, email, signed_up_at, user_id
+      FROM signups
+      WHERE event_id = $1
+      ORDER BY signed_up_at ASC
+      `,
+      [eventId]
+    ));
+  } catch (err) {
+    if (!isMissingSignupsUserIdColumn(err)) throw err;
+    ({ rows } = await pool.query(
+      `
+      SELECT id, name, email, signed_up_at
+      FROM signups
+      WHERE event_id = $1
+      ORDER BY signed_up_at ASC
+      `,
+      [eventId]
+    ));
+  }
 
   const signups = rows.map((row) => ({
     id: row.id,
     name: row.name,
     email: row.email,
     signedUpAt: row.signed_up_at,
+    userId: row.user_id ?? null,
   }));
 
   return { signups, total: signups.length };
+}
+
+function mapVolunteerSignupRow(row) {
+  const total = Number(row.spots_total);
+  const taken = Number(row.spots_taken);
+  return {
+    signupId: row.signup_id,
+    signedUpAt: row.signed_up_at,
+    eventId: row.id,
+    title: row.title,
+    type: row.type,
+    address: row.address,
+    city: row.city ?? null,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    spotsTotal: total,
+    spotsTaken: taken,
+    spotsLeft: Math.max(0, total - taken),
+    isActive: row.is_active,
+    removedByAdminAt: row.admin_removed_at ?? null,
+    orgName: row.org_name,
+  };
+}
+
+/**
+ * All events the volunteer has signed up for (linked user_id and/or matching signup email).
+ */
+export async function listSignupsForVolunteer(userId, email) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+
+  async function run(includeUserIdFilter, includeAdminRemovedCol) {
+    const adminSel = includeAdminRemovedCol
+      ? 'e.admin_removed_at'
+      : 'NULL::timestamptz AS admin_removed_at';
+    const where = includeUserIdFilter
+      ? '(s.user_id = $1::uuid OR (s.user_id IS NULL AND lower(trim(s.email)) = $2))'
+      : 'lower(trim(s.email)) = $1';
+    const params = includeUserIdFilter ? [userId, normalizedEmail] : [normalizedEmail];
+
+    const sql = `
+      SELECT DISTINCT ON (s.event_id)
+        s.id AS signup_id,
+        s.signed_up_at,
+        e.id,
+        e.title,
+        e.type,
+        e.address,
+        e.city,
+        e.starts_at,
+        e.ends_at,
+        e.spots_total,
+        e.spots_taken,
+        e.is_active,
+        ${adminSel},
+        o.name AS org_name
+      FROM signups s
+      INNER JOIN events e ON e.id = s.event_id
+      INNER JOIN orgs o ON o.id = e.org_id
+      WHERE ${where}
+      ORDER BY s.event_id, s.signed_up_at DESC`;
+
+    const { rows } = await pool.query(sql, params);
+    return rows.map(mapVolunteerSignupRow);
+  }
+
+  try {
+    const signups = await run(true, true);
+    return { signups };
+  } catch (e) {
+    if (isMissingSignupsUserIdColumn(e)) {
+      try {
+        const signups = await run(false, true);
+        return { signups };
+      } catch (e2) {
+        if (isMissingAdminRemovedColumn(e2)) {
+          const signups = await run(false, false);
+          return { signups };
+        }
+        throw e2;
+      }
+    }
+    if (isMissingAdminRemovedColumn(e)) {
+      try {
+        const signups = await run(true, false);
+        return { signups };
+      } catch (e2) {
+        if (isMissingSignupsUserIdColumn(e2)) {
+          try {
+            const signups = await run(false, false);
+            return { signups };
+          } catch (e3) {
+            throw e3;
+          }
+        }
+        throw e2;
+      }
+    }
+    throw e;
+  }
+}
+
+/**
+ * Volunteer profile + account fields for an organizer who owns the event,
+ * only if the volunteer has a signup on that event linked to user_id.
+ */
+export async function getVolunteerProfileForOrgEvent(eventId, orgId, volunteerUserId) {
+  const { rows: evRows } = await pool.query(
+    'SELECT 1 FROM events WHERE id = $1 AND org_id = $2',
+    [eventId, orgId]
+  );
+  if (evRows.length === 0) return null;
+
+  let suRows;
+  try {
+    ({ rows: suRows } = await pool.query(
+      'SELECT 1 FROM signups WHERE event_id = $1 AND user_id = $2',
+      [eventId, volunteerUserId]
+    ));
+  } catch (err) {
+    if (!isMissingSignupsUserIdColumn(err)) throw err;
+    return null;
+  }
+  if (suRows.length === 0) return null;
+
+  const { rows: userRows } = await pool.query(
+    'SELECT display_name, email FROM users WHERE id = $1',
+    [volunteerUserId]
+  );
+  const u = userRows[0];
+  if (!u) return null;
+
+  const { rows: profRows } = await pool.query(
+    `SELECT skills, availability, interests, experience, contact_preferences,
+            emergency_contact_name, emergency_contact_phone, updated_at
+     FROM volunteer_profiles WHERE user_id = $1`,
+    [volunteerUserId]
+  );
+  const p = profRows[0];
+
+  return {
+    displayName: u.display_name || '',
+    email: u.email || '',
+    skills: p?.skills || [],
+    availability: p?.availability || '',
+    interests: p?.interests || [],
+    experience: p?.experience || '',
+    contactPreferences: p?.contact_preferences || '',
+    emergencyContactName: p?.emergency_contact_name || '',
+    emergencyContactPhone: p?.emergency_contact_phone || '',
+    updatedAt: p?.updated_at ?? null,
+  };
 }
 
 async function signupIncrementSpots(client, eventId, useAdminRemovedFilter) {
@@ -768,10 +941,24 @@ async function signupCheckActiveEvent(client, eventId, useAdminRemovedFilter) {
   );
 }
 
-export async function createSignupForEvent(eventId, { name, email }) {
+export async function createSignupForEvent(eventId, { name, email, userId }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    if (userId) {
+      try {
+        const dup = await client.query(
+          'SELECT 1 FROM signups WHERE event_id = $1 AND user_id = $2',
+          [eventId, userId]
+        );
+        if (dup.rowCount > 0) {
+          await client.query('ROLLBACK');
+          return { ok: false, error: 'already_signed_up' };
+        }
+      } catch (err) {
+        if (!isMissingSignupsUserIdColumn(err)) throw err;
+      }
+    }
     let upd;
     try {
       upd = await signupIncrementSpots(client, eventId, true);
@@ -791,10 +978,18 @@ export async function createSignupForEvent(eventId, { name, email }) {
       if (ex.rowCount === 0) return { ok: false, error: 'not_found' };
       return { ok: false, error: 'full' };
     }
-    await client.query(
-      `INSERT INTO signups (event_id, name, email) VALUES ($1, $2, $3)`,
-      [eventId, name, email]
-    );
+    try {
+      await client.query(
+        `INSERT INTO signups (event_id, name, email, user_id) VALUES ($1, $2, $3, $4)`,
+        [eventId, name, email, userId ?? null]
+      );
+    } catch (err) {
+      if (!isMissingSignupsUserIdColumn(err)) throw err;
+      await client.query(
+        `INSERT INTO signups (event_id, name, email) VALUES ($1, $2, $3)`,
+        [eventId, name, email]
+      );
+    }
     await client.query('COMMIT');
     const r = upd.rows[0];
     return {

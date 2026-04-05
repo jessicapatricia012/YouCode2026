@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS } from '../eventTypes.js';
+import { SKILL_TAGS } from '../skillTags.js';
 import './OrgDashboard.css';
+
+function skillLabel(id) {
+  return SKILL_TAGS.find((t) => t.id === id)?.label ?? id;
+}
 
 function formatEventDate(iso) {
   if (!iso) return '—';
@@ -49,6 +54,10 @@ export default function OrgDashboard() {
   const [signupsError, setSignupsError] = useState(null);
   const [signupsList, setSignupsList] = useState([]);
   const [signupsTotal, setSignupsTotal] = useState(0);
+  const [profileViewUserId, setProfileViewUserId] = useState(null);
+  const [volunteerProfile, setVolunteerProfile] = useState(null);
+  const [volunteerProfileLoading, setVolunteerProfileLoading] = useState(false);
+  const [volunteerProfileError, setVolunteerProfileError] = useState(null);
 
   const orgId = user?.id;
 
@@ -98,6 +107,9 @@ export default function OrgDashboard() {
 
   useEffect(() => {
     if (!signupModal) return;
+    setProfileViewUserId(null);
+    setVolunteerProfile(null);
+    setVolunteerProfileError(null);
     let cancelled = false;
     setSignupsLoading(true);
     setSignupsError(null);
@@ -134,13 +146,59 @@ export default function OrgDashboard() {
   }, [signupModal, getAuthHeader]);
 
   useEffect(() => {
+    if (!signupModal || !profileViewUserId) {
+      setVolunteerProfileLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setVolunteerProfile(null);
+    setVolunteerProfileError(null);
+    setVolunteerProfileLoading(true);
+
+    (async () => {
+      try {
+        const r = await fetch(
+          `/api/events/${signupModal.id}/volunteers/${profileViewUserId}/profile`,
+          { headers: getAuthHeader() }
+        );
+        const data = await r.json().catch(() => ({}));
+        if (cancelled) return;
+        if (r.status === 401) {
+          setVolunteerProfileError('Session expired. Sign in again.');
+          return;
+        }
+        if (!r.ok) {
+          setVolunteerProfileError(data.message || 'Could not load profile.');
+          return;
+        }
+        setVolunteerProfile(data);
+      } catch {
+        if (!cancelled) setVolunteerProfileError('Could not load profile.');
+      } finally {
+        if (!cancelled) setVolunteerProfileLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [signupModal, profileViewUserId, getAuthHeader]);
+
+  const closeSignupModal = useCallback(() => {
+    setSignupModal(null);
+    setProfileViewUserId(null);
+    setVolunteerProfile(null);
+    setVolunteerProfileError(null);
+  }, []);
+
+  useEffect(() => {
     if (!signupModal) return;
     function onKey(e) {
-      if (e.key === 'Escape') setSignupModal(null);
+      if (e.key === 'Escape') closeSignupModal();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [signupModal]);
+  }, [signupModal, closeSignupModal]);
 
   const stats = useMemo(() => {
     const totalEvents = events.length;
@@ -347,8 +405,8 @@ export default function OrgDashboard() {
       {signupModal && (
         <div
           className="org-dashboard__modal-backdrop"
-          onClick={() => setSignupModal(null)}
-          onKeyDown={(e) => e.key === 'Escape' && setSignupModal(null)}
+          onClick={closeSignupModal}
+          onKeyDown={(e) => e.key === 'Escape' && closeSignupModal()}
           role="presentation"
         >
           <div
@@ -360,54 +418,169 @@ export default function OrgDashboard() {
           >
             <div className="org-dashboard__modal-head">
               <h2 id="org-dashboard-signups-title" className="org-dashboard__modal-title">
-                Signups
+                {profileViewUserId ? 'Volunteer profile' : 'Signups'}
               </h2>
               <button
                 type="button"
                 className="org-dashboard__modal-close"
                 aria-label="Close"
-                onClick={() => setSignupModal(null)}
+                onClick={closeSignupModal}
               >
                 ×
               </button>
             </div>
             <p className="org-dashboard__modal-event">{signupModal.title}</p>
-            {signupsLoading && (
-              <p className="org-dashboard__muted">Loading signups…</p>
-            )}
-            {signupsError && (
-              <p className="org-dashboard__modal-error">{signupsError}</p>
-            )}
-            {!signupsLoading && !signupsError && (
+
+            {profileViewUserId ? (
               <>
-                <p className="org-dashboard__modal-count">
-                  Total: <strong>{signupsTotal}</strong>
-                </p>
-                {signupsList.length === 0 ? (
-                  <p className="org-dashboard__muted">No signups yet.</p>
-                ) : (
-                  <div className="org-dashboard__modal-table-wrap">
-                    <table className="org-dashboard__modal-table">
-                      <thead>
-                        <tr>
-                          <th>Name</th>
-                          <th>Email</th>
-                          <th>Signed up</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {signupsList.map((s) => (
-                          <tr key={s.id}>
-                            <td>{s.name}</td>
-                            <td>
-                              <a href={`mailto:${s.email}`}>{s.email}</a>
-                            </td>
-                            <td>{formatSignupDate(s.signedUpAt)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                <button
+                  type="button"
+                  className="org-dashboard__profile-back"
+                  onClick={() => {
+                    setProfileViewUserId(null);
+                    setVolunteerProfile(null);
+                    setVolunteerProfileError(null);
+                  }}
+                >
+                  ← Back to signups
+                </button>
+                {volunteerProfileLoading && (
+                  <p className="org-dashboard__muted">Loading profile…</p>
+                )}
+                {volunteerProfileError && (
+                  <p className="org-dashboard__modal-error">{volunteerProfileError}</p>
+                )}
+                {!volunteerProfileLoading && !volunteerProfileError && volunteerProfile && (
+                  <div className="org-dashboard__volunteer-profile">
+                    <p className="org-dashboard__volunteer-profile-line">
+                      <span className="org-dashboard__volunteer-profile-label">Account name</span>
+                      {volunteerProfile.displayName || '—'}
+                    </p>
+                    <p className="org-dashboard__volunteer-profile-line">
+                      <span className="org-dashboard__volunteer-profile-label">Account email</span>
+                      {volunteerProfile.email ? (
+                        <a href={`mailto:${volunteerProfile.email}`}>{volunteerProfile.email}</a>
+                      ) : (
+                        '—'
+                      )}
+                    </p>
+                    <div className="org-dashboard__volunteer-profile-block">
+                      <span className="org-dashboard__volunteer-profile-label">Skills</span>
+                      {Array.isArray(volunteerProfile.skills) &&
+                      volunteerProfile.skills.length > 0 ? (
+                        <ul className="org-dashboard__volunteer-skills">
+                          {volunteerProfile.skills.map((id) => (
+                            <li key={id}>{skillLabel(id)}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="org-dashboard__muted org-dashboard__muted--inline">None listed</p>
+                      )}
+                    </div>
+                    <div className="org-dashboard__volunteer-profile-block">
+                      <span className="org-dashboard__volunteer-profile-label">Availability</span>
+                      <p className="org-dashboard__volunteer-profile-text">
+                        {volunteerProfile.availability?.trim() || '—'}
+                      </p>
+                    </div>
+                    <div className="org-dashboard__volunteer-profile-block">
+                      <span className="org-dashboard__volunteer-profile-label">Interests</span>
+                      {Array.isArray(volunteerProfile.interests) &&
+                      volunteerProfile.interests.filter(Boolean).length > 0 ? (
+                        <ul className="org-dashboard__volunteer-list">
+                          {volunteerProfile.interests.filter(Boolean).map((t, i) => (
+                            <li key={i}>{t}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="org-dashboard__muted org-dashboard__muted--inline">—</p>
+                      )}
+                    </div>
+                    <div className="org-dashboard__volunteer-profile-block">
+                      <span className="org-dashboard__volunteer-profile-label">Experience</span>
+                      <p className="org-dashboard__volunteer-profile-text">
+                        {volunteerProfile.experience?.trim() || '—'}
+                      </p>
+                    </div>
+                    <div className="org-dashboard__volunteer-profile-block">
+                      <span className="org-dashboard__volunteer-profile-label">
+                        Contact preferences
+                      </span>
+                      <p className="org-dashboard__volunteer-profile-text">
+                        {volunteerProfile.contactPreferences?.trim() || '—'}
+                      </p>
+                    </div>
+                    <div className="org-dashboard__volunteer-profile-block">
+                      <span className="org-dashboard__volunteer-profile-label">Emergency contact</span>
+                      <p className="org-dashboard__volunteer-profile-text">
+                        {[volunteerProfile.emergencyContactName, volunteerProfile.emergencyContactPhone]
+                          .filter(Boolean)
+                          .join(' · ') || '—'}
+                      </p>
+                    </div>
                   </div>
+                )}
+              </>
+            ) : (
+              <>
+                {signupsLoading && (
+                  <p className="org-dashboard__muted">Loading signups…</p>
+                )}
+                {signupsError && (
+                  <p className="org-dashboard__modal-error">{signupsError}</p>
+                )}
+                {!signupsLoading && !signupsError && (
+                  <>
+                    <p className="org-dashboard__modal-count">
+                      Total: <strong>{signupsTotal}</strong>
+                    </p>
+                    <p className="org-dashboard__modal-footnote">
+                      “View profile” appears when the volunteer signed in with a visitor account. Older
+                      signups may not be linked.
+                    </p>
+                    {signupsList.length === 0 ? (
+                      <p className="org-dashboard__muted">No signups yet.</p>
+                    ) : (
+                      <div className="org-dashboard__modal-table-wrap">
+                        <table className="org-dashboard__modal-table">
+                          <thead>
+                            <tr>
+                              <th>Name</th>
+                              <th>Email</th>
+                              <th>Signed up</th>
+                              <th>Profile</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {signupsList.map((s) => (
+                              <tr key={s.id}>
+                                <td>{s.name}</td>
+                                <td>
+                                  <a href={`mailto:${s.email}`}>{s.email}</a>
+                                </td>
+                                <td>{formatSignupDate(s.signedUpAt)}</td>
+                                <td>
+                                  {s.userId ? (
+                                    <button
+                                      type="button"
+                                      className="org-dashboard__link-btn"
+                                      onClick={() => setProfileViewUserId(s.userId)}
+                                    >
+                                      View profile
+                                    </button>
+                                  ) : (
+                                    <span className="org-dashboard__muted org-dashboard__muted--inline">
+                                      —
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             )}

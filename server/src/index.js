@@ -15,6 +15,7 @@ import {
   deleteEventByOrg,
   updateEventByOrg,
   listSignupsForOrgEvent,
+  getVolunteerProfileForOrgEvent,
   parseTypesQuery,
 } from './eventsDb.js';
 import {
@@ -155,6 +156,27 @@ app.get('/api/events/:id/signups', requireAuth, async (req, res) => {
   }
 });
 
+/** Organizer-only: volunteer profile when they signed up for this org's event (linked account). */
+app.get('/api/events/:eventId/volunteers/:userId/profile', requireAuth, async (req, res) => {
+  try {
+    if (req.auth.role !== 'organizer') {
+      return res.status(403).json({ error: 'forbidden', message: 'Organizers only.' });
+    }
+    const { eventId, userId } = req.params;
+    const profile = await getVolunteerProfileForOrgEvent(eventId, req.auth.id, userId);
+    if (!profile) {
+      return res.status(404).json({
+        error: 'not_found',
+        message: 'Event or linked volunteer signup not found.',
+      });
+    }
+    res.json(profile);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
 app.patch('/api/events/:id', requireAuth, async (req, res) => {
   try {
     if (req.auth.role !== 'organizer') {
@@ -224,7 +246,8 @@ app.post('/api/events/:id/signups', requireAuth, async (req, res) => {
     if (!email) {
       return res.status(400).json({ error: 'invalid_input', message: 'Email is required for signup.' });
     }
-    const result = await createSignupForEvent(id, { name, email });
+    const userId = req.auth.role === 'user' ? req.auth.id : null;
+    const result = await createSignupForEvent(id, { name, email, userId });
     if (!result.ok) {
       const status = result.error === 'not_found' ? 404 : 409;
       return res.status(status).json(result);

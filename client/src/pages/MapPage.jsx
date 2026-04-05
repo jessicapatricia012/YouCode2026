@@ -258,11 +258,13 @@ export default function MapPage() {
         const msg =
           data.error === 'full'
             ? 'This event is full.'
-            : r.status === 404
-              ? 'Event not found.'
-              : r.status === 401
-                ? 'Please sign in again.'
-                : 'Signup failed.';
+            : data.error === 'already_signed_up'
+              ? 'You are already signed up for this event.'
+              : r.status === 404
+                ? 'Event not found.'
+                : r.status === 401
+                  ? 'Please sign in again.'
+                  : 'Signup failed.';
         window.alert(msg);
         return;
       }

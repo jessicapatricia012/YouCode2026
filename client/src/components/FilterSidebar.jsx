@@ -299,9 +299,14 @@ export default function FilterSidebar({
                 </Link>
               )}
               {userRole === 'user' && (
-                <Link to="/visitor" className="sidebar__user-action sidebar__user-action--profile">
-                  Profile
-                </Link>
+                <>
+                  <Link to="/my-signups" className="sidebar__user-action sidebar__user-action--primary">
+                    My signups
+                  </Link>
+                  <Link to="/visitor" className="sidebar__user-action sidebar__user-action--profile">
+                    Profile
+                  </Link>
+                </>
               )}
               {onLogout && (
                 <button

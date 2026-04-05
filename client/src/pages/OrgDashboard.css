@@ -395,3 +395,86 @@
 .org-dashboard__modal-table a {
   color: var(--connectbc-brand);
 }
+
+.org-dashboard__modal-footnote {
+  margin: 0 0 0.65rem;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #71717a;
+}
+
+.org-dashboard__muted--inline {
+  margin: 0;
+  display: inline;
+}
+
+.org-dashboard__profile-back {
+  display: inline-block;
+  margin: 0 0 0.85rem;
+  padding: 0.25rem 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--connectbc-brand);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.org-dashboard__profile-back:hover {
+  color: var(--connectbc-brand-hover);
+}
+
+.org-dashboard__volunteer-profile {
+  font-size: 0.875rem;
+  line-height: 1.45;
+  max-height: min(55vh, 420px);
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.org-dashboard__volunteer-profile-line {
+  margin: 0 0 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.org-dashboard__volunteer-profile-block {
+  margin: 0 0 0.75rem;
+}
+
+.org-dashboard__volunteer-profile-block:last-child {
+  margin-bottom: 0;
+}
+
+.org-dashboard__volunteer-profile-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #71717a;
+  margin-bottom: 0.25rem;
+}
+
+.org-dashboard__volunteer-profile-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #3f3f46;
+}
+
+.org-dashboard__volunteer-skills,
+.org-dashboard__volunteer-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #3f3f46;
+}
+
+.org-dashboard__volunteer-skills li,
+.org-dashboard__volunteer-list li {
+  margin-bottom: 0.2rem;
+}

@@ -13,6 +13,7 @@ import OrgDashboard from './pages/OrgDashboard.jsx';
 import PostEventPage from './pages/PostEventPage.jsx';
 import EditEventPage from './pages/EditEventPage.jsx';
 import VisitorPage from './pages/VisitorPage.jsx';
+import VolunteerSignupsPage from './pages/VolunteerSignupsPage.jsx';
 import AdminPage from './pages/AdminPage.jsx';
 import './App.css';
 
@@ -116,6 +117,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <VisitorPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-signups"
+        element={
+          <ProtectedRoute>
+            <VolunteerSignupsPage />
           </ProtectedRoute>
         }
       />

@@ -100,6 +100,11 @@ export default function VisitorPage() {
             show its pin.
           </Link>
         </p>
+        <p className="visitor-header__matches">
+          <Link to="/my-signups" className="visitor-header__matches-link">
+            View events you have signed up for
+          </Link>
+        </p>
       </header>
 
       <form className="visitor-form" onSubmit={handleSubmit}>
