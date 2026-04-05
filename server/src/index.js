@@ -4,6 +4,7 @@ import cors from 'cors';
 import authRouter from '../routes/auth.js';
 import volunteerRouter from '../routes/volunteer.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { requireAdmin } from '../middleware/requireAdmin.js';
 import {
   listEventsFromDb,
   listOrgEventsFromDb,
@@ -16,6 +17,11 @@ import {
   listSignupsForOrgEvent,
   parseTypesQuery,
 } from './eventsDb.js';
+import {
+  adminRemoveEventById,
+  listAllEventsForAdmin,
+} from './adminEventsDb.js';
+import { notifyOrganizerEventRemoved } from './notifyEmail.js';
 import { suggestCityForStreetLine } from './geocode.js';
 
 const app = express();
@@ -35,6 +41,39 @@ app.get('/api/ping', (_req, res) => {
 });
 
 app.use('/api/auth', authRouter);
+
+app.get('/api/admin/events', requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    const events = await listAllEventsForAdmin();
+    res.set('Cache-Control', 'no-store');
+    res.json({ events });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.delete('/api/admin/events/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const result = await adminRemoveEventById(req.params.id);
+    if (!result) {
+      return res.status(404).json({ error: 'not_found' });
+    }
+    try {
+      await notifyOrganizerEventRemoved({
+        to: result.orgEmail,
+        orgName: result.orgName,
+        eventTitle: result.eventTitle,
+      });
+    } catch (notifyErr) {
+      console.error('Organizer removal email failed:', notifyErr);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
 
 /** Suggest BC city from a street line (Mapbox). Requires MAPBOX_TOKEN. */
 app.get('/api/geocode/suggest', requireAuth, async (req, res) => {
@@ -126,6 +165,9 @@ app.patch('/api/events/:id', requireAuth, async (req, res) => {
   } catch (err) {
     if (err.code === 'not_found') {
       return res.status(404).json({ error: 'not_found', message: 'Event not found.' });
+    }
+    if (err.code === 'moderated') {
+      return res.status(403).json({ error: 'moderated', message: err.message });
     }
     if (err.code === 'validation') {
       return res.status(400).json({ error: 'invalid_input', message: err.message });

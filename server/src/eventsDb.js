@@ -26,6 +26,76 @@ function isMissingSkillTagsColumn(err) {
   );
 }
 
+/** PostgreSQL undefined_column when `events.admin_removed_at` was never migrated. */
+function isMissingAdminRemovedColumn(err) {
+  return (
+    err?.code === '42703' && /admin_removed_at/i.test(String(err.message ?? ''))
+  );
+}
+
+function buildListEventsQuery(includeSkillTags, includeAdminRemovedFilter, typesFilter) {
+  const skillLine = includeSkillTags ? '      e.skill_tags,\n' : '';
+  let sql = `
+    SELECT
+      e.id,
+      e.title,
+      e.description,
+      e.type,
+      e.address,
+      e.city,
+      e.website_url,
+      e.starts_at,
+      e.ends_at,
+      e.spots_total,
+      e.spots_taken,
+${skillLine}      o.name AS org_name,
+      ST_Y(e.location::geometry) AS lat,
+      ST_X(e.location::geometry) AS lng
+    FROM events e
+    INNER JOIN orgs o ON o.id = e.org_id
+    WHERE e.is_active = true`;
+  if (includeAdminRemovedFilter) {
+    sql += `\n      AND e.admin_removed_at IS NULL`;
+  }
+  const params = [];
+  if (typesFilter?.length) {
+    const allowed = typesFilter.filter((t) => ALLOWED_TYPES.has(t));
+    if (allowed.length > 0) {
+      params.push(allowed);
+      sql += ` AND e.type = ANY($${params.length}::event_type[])`;
+    }
+  }
+  sql += ` ORDER BY e.starts_at ASC`;
+  return [sql, params];
+}
+
+function buildGetPublicEventByIdSql(includeSkillTags, includeAdminRemovedFilter) {
+  const skillLine = includeSkillTags ? '      e.skill_tags,\n' : '';
+  let sql = `
+    SELECT
+      e.id,
+      e.title,
+      e.description,
+      e.type,
+      e.address,
+      e.city,
+      e.website_url,
+      e.starts_at,
+      e.ends_at,
+      e.spots_total,
+      e.spots_taken,
+${skillLine}      o.name AS org_name,
+      ST_Y(e.location::geometry) AS lat,
+      ST_X(e.location::geometry) AS lng
+    FROM events e
+    INNER JOIN orgs o ON o.id = e.org_id
+    WHERE e.id = $1 AND e.is_active = true`;
+  if (includeAdminRemovedFilter) {
+    sql += ` AND e.admin_removed_at IS NULL`;
+  }
+  return sql;
+}
+
 function mapRow(row) {
   const spotsLeft = row.spots_total - row.spots_taken;
   const out = {
@@ -52,76 +122,31 @@ function mapRow(row) {
   return out;
 }
 
-const LIST_EVENTS_SELECT_WITH_TAGS = `
-    SELECT
-      e.id,
-      e.title,
-      e.description,
-      e.type,
-      e.address,
-      e.city,
-      e.website_url,
-      e.starts_at,
-      e.ends_at,
-      e.spots_total,
-      e.spots_taken,
-      e.skill_tags,
-      o.name AS org_name,
-      ST_Y(e.location::geometry) AS lat,
-      ST_X(e.location::geometry) AS lng
-    FROM events e
-    INNER JOIN orgs o ON o.id = e.org_id
-    WHERE e.is_active = true
-`;
-
-const LIST_EVENTS_SELECT_NO_TAGS = `
-    SELECT
-      e.id,
-      e.title,
-      e.description,
-      e.type,
-      e.address,
-      e.city,
-      e.website_url,
-      e.starts_at,
-      e.ends_at,
-      e.spots_total,
-      e.spots_taken,
-      o.name AS org_name,
-      ST_Y(e.location::geometry) AS lat,
-      ST_X(e.location::geometry) AS lng
-    FROM events e
-    INNER JOIN orgs o ON o.id = e.org_id
-    WHERE e.is_active = true
-`;
-
 export async function listEventsFromDb(typesFilter) {
-  let sql = LIST_EVENTS_SELECT_WITH_TAGS;
-  const params = [];
-  if (typesFilter?.length) {
-    const allowed = typesFilter.filter((t) => ALLOWED_TYPES.has(t));
-    if (allowed.length > 0) {
-      params.push(allowed);
-      sql += ` AND e.type = ANY($1::event_type[])`;
+  const attempts = [
+    [true, true],
+    [false, true],
+    [true, false],
+    [false, false],
+  ];
+  let lastErr;
+  for (const [skillTags, adminFilter] of attempts) {
+    try {
+      const [sql, params] = buildListEventsQuery(
+        skillTags,
+        adminFilter,
+        typesFilter
+      );
+      const { rows } = await pool.query(sql, params);
+      return rows.map(mapRow);
+    } catch (err) {
+      lastErr = err;
+      if (isMissingSkillTagsColumn(err) && skillTags) continue;
+      if (isMissingAdminRemovedColumn(err) && adminFilter) continue;
+      throw err;
     }
   }
-  sql += ` ORDER BY e.starts_at ASC`;
-  try {
-    const { rows } = await pool.query(sql, params);
-    return rows.map(mapRow);
-  } catch (err) {
-    if (!isMissingSkillTagsColumn(err)) throw err;
-    let sqlNo = LIST_EVENTS_SELECT_NO_TAGS;
-    if (typesFilter?.length) {
-      const allowed = typesFilter.filter((t) => ALLOWED_TYPES.has(t));
-      if (allowed.length > 0) {
-        sqlNo += ` AND e.type = ANY($1::event_type[])`;
-      }
-    }
-    sqlNo += ` ORDER BY e.starts_at ASC`;
-    const { rows } = await pool.query(sqlNo, params);
-    return rows.map(mapRow);
-  }
+  throw lastErr;
 }
 
 /** Events that overlap the volunteer's profile skills, best matches first. */
@@ -132,10 +157,14 @@ export async function listRecommendedEventsForVolunteer(userId, typesFilter) {
   );
   const profileSkills = normalizeSkillTags(profRows[0]?.skills ?? []);
   if (profileSkills.length === 0) {
-    return { events: [], needsSkills: true };
+    return { events: [], needsSkills: true, profileSkills: [] };
   }
 
-  let sql = `
+  function recommendedSql(includeAdminRemoved) {
+    const adminLine = includeAdminRemoved
+      ? '\n      AND e.admin_removed_at IS NULL'
+      : '';
+    let s = `
     SELECT
       e.id,
       e.title,
@@ -159,83 +188,84 @@ export async function listRecommendedEventsForVolunteer(userId, typesFilter) {
       ) AS match_count
     FROM events e
     INNER JOIN orgs o ON o.id = e.org_id
-    WHERE e.is_active = true
+    WHERE e.is_active = true${adminLine}
       AND e.skill_tags && $1::text[]
   `;
-  const params = [profileSkills];
-  if (typesFilter?.length) {
-    const allowed = typesFilter.filter((t) => ALLOWED_TYPES.has(t));
-    if (allowed.length > 0) {
-      params.push(allowed);
-      sql += ` AND e.type = ANY($${params.length}::event_type[])`;
+    const params = [profileSkills];
+    if (typesFilter?.length) {
+      const allowed = typesFilter.filter((t) => ALLOWED_TYPES.has(t));
+      if (allowed.length > 0) {
+        params.push(allowed);
+        s += ` AND e.type = ANY($${params.length}::event_type[])`;
+      }
     }
+    s += ` ORDER BY match_count DESC, e.starts_at ASC LIMIT 40`;
+    return [s, params];
   }
-  sql += ` ORDER BY match_count DESC, e.starts_at ASC LIMIT 40`;
+
   try {
+    const [sql, params] = recommendedSql(true);
     const { rows } = await pool.query(sql, params);
-    return { events: rows.map(mapRow), needsSkills: false };
+    return {
+      events: rows.map(mapRow),
+      needsSkills: false,
+      profileSkills,
+    };
   } catch (err) {
-    if (!isMissingSkillTagsColumn(err)) throw err;
-    const events = await listEventsFromDb(typesFilter);
-    return { events, needsSkills: false };
+    if (isMissingSkillTagsColumn(err)) {
+      const events = await listEventsFromDb(typesFilter);
+      return { events, needsSkills: false, profileSkills };
+    }
+    if (isMissingAdminRemovedColumn(err)) {
+      const [sql2, params2] = recommendedSql(false);
+      const { rows } = await pool.query(sql2, params2);
+      return {
+        events: rows.map(mapRow),
+        needsSkills: false,
+        profileSkills,
+      };
+    }
+    throw err;
   }
 }
 
 export async function getEventByIdFromDb(id) {
-  const sqlWith = `
-    SELECT
-      e.id,
-      e.title,
-      e.description,
-      e.type,
-      e.address,
-      e.city,
-      e.website_url,
-      e.starts_at,
-      e.ends_at,
-      e.spots_total,
-      e.spots_taken,
-      e.skill_tags,
-      o.name AS org_name,
-      ST_Y(e.location::geometry) AS lat,
-      ST_X(e.location::geometry) AS lng
-    FROM events e
-    INNER JOIN orgs o ON o.id = e.org_id
-    WHERE e.id = $1 AND e.is_active = true
-  `;
-  const sqlNo = `
-    SELECT
-      e.id,
-      e.title,
-      e.description,
-      e.type,
-      e.address,
-      e.city,
-      e.website_url,
-      e.starts_at,
-      e.ends_at,
-      e.spots_total,
-      e.spots_taken,
-      o.name AS org_name,
-      ST_Y(e.location::geometry) AS lat,
-      ST_X(e.location::geometry) AS lng
-    FROM events e
-    INNER JOIN orgs o ON o.id = e.org_id
-    WHERE e.id = $1 AND e.is_active = true
-  `;
-  try {
-    const { rows } = await pool.query(sqlWith, [id]);
-    return rows[0] ? mapRow(rows[0]) : null;
-  } catch (err) {
-    if (!isMissingSkillTagsColumn(err)) throw err;
-    const { rows } = await pool.query(sqlNo, [id]);
-    return rows[0] ? mapRow(rows[0]) : null;
+  const attempts = [
+    [true, true],
+    [false, true],
+    [true, false],
+    [false, false],
+  ];
+  let lastErr;
+  for (const [skillTags, adminFilter] of attempts) {
+    try {
+      const sql = buildGetPublicEventByIdSql(skillTags, adminFilter);
+      const { rows } = await pool.query(sql, [id]);
+      return rows[0] ? mapRow(rows[0]) : null;
+    } catch (err) {
+      lastErr = err;
+      if (isMissingSkillTagsColumn(err) && skillTags) continue;
+      if (isMissingAdminRemovedColumn(err) && adminFilter) continue;
+      throw err;
+    }
   }
+  throw lastErr;
 }
 
 /** Organizer's event by id (includes inactive). */
 export async function getOrgEventByIdFromDb(eventId, orgId) {
-  const sqlWith = `
+  const attempts = [
+    [true, true],
+    [false, true],
+    [true, false],
+    [false, false],
+  ];
+  let lastErr;
+  for (const [skillTags, adminCol] of attempts) {
+    try {
+      const skillLine = skillTags ? '      e.skill_tags,\n' : '';
+      const adminLine = adminCol ? '      e.admin_removed_at,\n' : '';
+      const sql = `
     SELECT
       e.id,
       e.title,
@@ -249,45 +279,29 @@ export async function getOrgEventByIdFromDb(eventId, orgId) {
       e.spots_total,
       e.spots_taken,
       e.is_active,
-      e.skill_tags,
-      o.name AS org_name,
+${adminLine}${skillLine}      o.name AS org_name,
       ST_Y(e.location::geometry) AS lat,
       ST_X(e.location::geometry) AS lng
     FROM events e
     INNER JOIN orgs o ON o.id = e.org_id
     WHERE e.id = $1 AND e.org_id = $2
   `;
-  const sqlNo = `
-    SELECT
-      e.id,
-      e.title,
-      e.description,
-      e.type,
-      e.address,
-      e.city,
-      e.website_url,
-      e.starts_at,
-      e.ends_at,
-      e.spots_total,
-      e.spots_taken,
-      e.is_active,
-      o.name AS org_name,
-      ST_Y(e.location::geometry) AS lat,
-      ST_X(e.location::geometry) AS lng
-    FROM events e
-    INNER JOIN orgs o ON o.id = e.org_id
-    WHERE e.id = $1 AND e.org_id = $2
-  `;
-  let rows;
-  try {
-    ({ rows } = await pool.query(sqlWith, [eventId, orgId]));
-  } catch (err) {
-    if (!isMissingSkillTagsColumn(err)) throw err;
-    ({ rows } = await pool.query(sqlNo, [eventId, orgId]));
+      const { rows } = await pool.query(sql, [eventId, orgId]);
+      if (!rows[0]) return null;
+      const r = rows[0];
+      return {
+        ...mapRow(r),
+        isActive: r.is_active,
+        removedByAdminAt: adminCol ? (r.admin_removed_at ?? null) : null,
+      };
+    } catch (err) {
+      lastErr = err;
+      if (isMissingSkillTagsColumn(err) && skillTags) continue;
+      if (isMissingAdminRemovedColumn(err) && adminCol) continue;
+      throw err;
+    }
   }
-  if (!rows[0]) return null;
-  const r = rows[0];
-  return { ...mapRow(r), isActive: r.is_active };
+  throw lastErr;
 }
 
 function mapOrgEventRow(row) {
@@ -310,13 +324,25 @@ function mapOrgEventRow(row) {
     spotsTotal: row.spots_total,
     spotsTaken: row.spots_taken,
     isActive: row.is_active,
+    removedByAdminAt: row.admin_removed_at ?? null,
     signupCount: Number(row.signup_count ?? 0),
   };
 }
 
 /** All events for an org (including inactive), with signup counts */
 export async function listOrgEventsFromDb(orgId) {
-  const sqlWith = `
+  const attempts = [
+    [true, true],
+    [false, true],
+    [true, false],
+    [false, false],
+  ];
+  let lastErr;
+  for (const [skillTags, adminCol] of attempts) {
+    try {
+      const skillLine = skillTags ? '      e.skill_tags,\n' : '';
+      const adminLine = adminCol ? '      e.admin_removed_at,\n' : '';
+      const sql = `
     SELECT
       e.id,
       e.title,
@@ -330,8 +356,7 @@ export async function listOrgEventsFromDb(orgId) {
       e.spots_total,
       e.spots_taken,
       e.is_active,
-      e.skill_tags,
-      o.name AS org_name,
+${adminLine}${skillLine}      o.name AS org_name,
       ST_Y(e.location::geometry) AS lat,
       ST_X(e.location::geometry) AS lng,
       (SELECT COUNT(*)::int FROM signups s WHERE s.event_id = e.id) AS signup_count
@@ -340,37 +365,28 @@ export async function listOrgEventsFromDb(orgId) {
     WHERE e.org_id = $1
     ORDER BY e.starts_at DESC
   `;
-  const sqlNo = `
-    SELECT
-      e.id,
-      e.title,
-      e.description,
-      e.type,
-      e.address,
-      e.city,
-      e.website_url,
-      e.starts_at,
-      e.ends_at,
-      e.spots_total,
-      e.spots_taken,
-      e.is_active,
-      o.name AS org_name,
-      ST_Y(e.location::geometry) AS lat,
-      ST_X(e.location::geometry) AS lng,
-      (SELECT COUNT(*)::int FROM signups s WHERE s.event_id = e.id) AS signup_count
-    FROM events e
-    INNER JOIN orgs o ON o.id = e.org_id
-    WHERE e.org_id = $1
-    ORDER BY e.starts_at DESC
-  `;
-  let rows;
-  try {
-    ({ rows } = await pool.query(sqlWith, [orgId]));
-  } catch (err) {
-    if (!isMissingSkillTagsColumn(err)) throw err;
-    ({ rows } = await pool.query(sqlNo, [orgId]));
+      const { rows } = await pool.query(sql, [orgId]);
+      return rows.map(mapOrgEventRow);
+    } catch (err) {
+      lastErr = err;
+      if (isMissingSkillTagsColumn(err) && skillTags) continue;
+      if (isMissingAdminRemovedColumn(err) && adminCol) continue;
+      throw err;
+    }
   }
-  return rows.map(mapOrgEventRow);
+  throw lastErr;
+}
+
+function buildUpdateEventExistingSelect(includeSkillTags, includeAdminCol) {
+  const st = includeSkillTags ? ', skill_tags' : '';
+  const ad = includeAdminCol ? ', admin_removed_at' : '';
+  return `
+    SELECT address, city, spots_taken, spots_total, website_url${st}${ad},
+      ST_Y(location::geometry) AS lat,
+      ST_X(location::geometry) AS lng
+    FROM events
+    WHERE id = $1 AND org_id = $2
+  `;
 }
 
 function validationError(message) {
@@ -521,36 +537,44 @@ export async function deleteEventByOrg(eventId, orgId) {
 
 export async function updateEventByOrg(eventId, orgId, body) {
   let existingRows;
-  try {
-    ({ rows: existingRows } = await pool.query(
-      `
-    SELECT address, city, spots_taken, spots_total, website_url, skill_tags,
-      ST_Y(location::geometry) AS lat,
-      ST_X(location::geometry) AS lng
-    FROM events
-    WHERE id = $1 AND org_id = $2
-    `,
-      [eventId, orgId]
-    ));
-  } catch (err) {
-    if (!isMissingSkillTagsColumn(err)) throw err;
-    ({ rows: existingRows } = await pool.query(
-      `
-    SELECT address, city, spots_taken, spots_total, website_url,
-      ST_Y(location::geometry) AS lat,
-      ST_X(location::geometry) AS lng
-    FROM events
-    WHERE id = $1 AND org_id = $2
-    `,
-      [eventId, orgId]
-    ));
+  const selAttempts = [
+    [true, true],
+    [false, true],
+    [true, false],
+    [false, false],
+  ];
+  let lastSelErr;
+  for (const [skillTags, adminCol] of selAttempts) {
+    try {
+      ({ rows: existingRows } = await pool.query(
+        buildUpdateEventExistingSelect(skillTags, adminCol),
+        [eventId, orgId]
+      ));
+      lastSelErr = null;
+      break;
+    } catch (err) {
+      lastSelErr = err;
+      if (isMissingSkillTagsColumn(err) && skillTags) continue;
+      if (isMissingAdminRemovedColumn(err) && adminCol) continue;
+      throw err;
+    }
   }
+  if (lastSelErr) throw lastSelErr;
+
   if (!existingRows[0]) {
     const e = new Error('Not found');
     e.code = 'not_found';
     throw e;
   }
   const ex = existingRows[0];
+
+  if (ex.admin_removed_at) {
+    const mod = new Error(
+      'This listing was removed by site administrators and cannot be edited.'
+    );
+    mod.code = 'moderated';
+    throw mod;
+  }
 
   const title = String(body?.title ?? '').trim();
   const type = String(body?.type ?? '').trim();
@@ -743,6 +767,12 @@ export async function listSignupsForOrgEvent(eventId, orgId) {
   return { signups, total: signups.length };
 }
 
+async function signupIncrementSpots(client, eventId, useAdminRemovedFilter) {
+  const adminClause = useAdminRemovedFilter
+    ? '\n         AND admin_removed_at IS NULL'
+    : '';
+  return client.query(
+    `UPDATE events
 export async function createSignupForEvent(eventId, { name, email, signupType = 'attending', volunteerProfile = null }) {
   const client = await pool.connect();
   try {
@@ -751,17 +781,41 @@ export async function createSignupForEvent(eventId, { name, email, signupType = 
       `UPDATE events
        SET spots_taken = spots_taken + 1
        WHERE id = $1
-         AND is_active = true
+         AND is_active = true${adminClause}
          AND spots_taken < spots_total
        RETURNING spots_total, spots_taken`,
-      [eventId]
-    );
+    [eventId]
+  );
+}
+
+async function signupCheckActiveEvent(client, eventId, useAdminRemovedFilter) {
+  const adminClause = useAdminRemovedFilter ? ' AND admin_removed_at IS NULL' : '';
+  return client.query(
+    `SELECT 1 FROM events WHERE id = $1 AND is_active = true${adminClause}`,
+    [eventId]
+  );
+}
+
+export async function createSignupForEvent(eventId, { name, email }) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let upd;
+    try {
+      upd = await signupIncrementSpots(client, eventId, true);
+    } catch (err) {
+      if (!isMissingAdminRemovedColumn(err)) throw err;
+      upd = await signupIncrementSpots(client, eventId, false);
+    }
     if (upd.rowCount === 0) {
       await client.query('ROLLBACK');
-      const ex = await client.query(
-        'SELECT 1 FROM events WHERE id = $1 AND is_active = true',
-        [eventId]
-      );
+      let ex;
+      try {
+        ex = await signupCheckActiveEvent(client, eventId, true);
+      } catch (err) {
+        if (!isMissingAdminRemovedColumn(err)) throw err;
+        ex = await signupCheckActiveEvent(client, eventId, false);
+      }
       if (ex.rowCount === 0) return { ok: false, error: 'not_found' };
       return { ok: false, error: 'full' };
     }

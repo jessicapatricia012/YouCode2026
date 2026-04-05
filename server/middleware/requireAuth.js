@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 
-const VALID_ROLES = new Set(['user', 'organizer']);
+const VALID_ROLES = new Set(['user', 'organizer', 'admin']);
 
 /**
  * Reads Authorization: Bearer <token>, verifies JWT with JWT_SECRET,

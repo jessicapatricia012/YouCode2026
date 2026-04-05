@@ -286,32 +286,54 @@ export default function OrgDashboard() {
                       {ev.spotsTaken} / {ev.spotsTotal}
                     </td>
                     <td>
-                      <span
-                        className={
-                          ev.isActive
-                            ? 'org-dashboard__pill org-dashboard__pill--on'
-                            : 'org-dashboard__pill org-dashboard__pill--off'
-                        }
-                      >
-                        {ev.isActive ? 'Yes' : 'No'}
-                      </span>
+                      {ev.removedByAdminAt ? (
+                        <span
+                          className="org-dashboard__pill org-dashboard__pill--warn"
+                          title="Removed from the public map by an administrator"
+                        >
+                          Moderated
+                        </span>
+                      ) : (
+                        <span
+                          className={
+                            ev.isActive
+                              ? 'org-dashboard__pill org-dashboard__pill--on'
+                              : 'org-dashboard__pill org-dashboard__pill--off'
+                          }
+                        >
+                          {ev.isActive ? 'Yes' : 'No'}
+                        </span>
+                      )}
                     </td>
                     <td>
                       <div className="org-dashboard__row-actions">
-                        <Link
-                          to={`/edit/${ev.id}`}
-                          className="org-dashboard__link-btn"
-                        >
-                          Edit
-                        </Link>
-                        <button
-                          type="button"
-                          className="org-dashboard__link-btn org-dashboard__link-btn--danger"
-                          disabled={deletingId === ev.id}
-                          onClick={() => handleDelete(ev.id, ev.title)}
-                        >
-                          {deletingId === ev.id ? 'Deleting…' : 'Delete'}
-                        </button>
+                        {ev.removedByAdminAt ? (
+                          <button
+                            type="button"
+                            className="org-dashboard__link-btn org-dashboard__link-btn--danger"
+                            disabled={deletingId === ev.id}
+                            onClick={() => handleDelete(ev.id, ev.title)}
+                          >
+                            {deletingId === ev.id ? 'Deleting…' : 'Delete'}
+                          </button>
+                        ) : (
+                          <>
+                            <Link
+                              to={`/edit/${ev.id}`}
+                              className="org-dashboard__link-btn"
+                            >
+                              Edit
+                            </Link>
+                            <button
+                              type="button"
+                              className="org-dashboard__link-btn org-dashboard__link-btn--danger"
+                              disabled={deletingId === ev.id}
+                              onClick={() => handleDelete(ev.id, ev.title)}
+                            >
+                              {deletingId === ev.id ? 'Deleting…' : 'Delete'}
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

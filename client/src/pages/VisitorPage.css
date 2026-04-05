@@ -21,6 +21,21 @@
   font-size: 1.1rem;
 }
 
+.visitor-header__matches {
+  margin: 1rem 0 0 !important;
+}
+
+.visitor-header__matches-link {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #214bb2;
+  text-decoration: none;
+}
+
+.visitor-header__matches-link:hover {
+  text-decoration: underline;
+}
+
 .visitor-form {
   display: flex;
   flex-direction: column;
@@ -203,74 +218,12 @@ textarea {
   border: 1px solid #f5c6cb;
 }
 
-.visitor-page__rec-hint {
-  margin: 0.75rem 0 0;
-  font-size: 0.85rem;
-  color: #666;
-}
-
-.visitor-page__recommendations {
-  border-color: #c7d2fe;
-  background: #f8fafc;
-}
-
-.visitor-page__rec-muted {
-  margin: 0;
-  color: #64748b;
-  font-size: 0.95rem;
-}
-
-.visitor-page__rec-list {
-  list-style: none;
-  margin: 0.75rem 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-}
-
-.visitor-page__rec-card {
-  margin: 0;
-  padding: 0.85rem 1rem;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-}
-
-.visitor-page__rec-title {
-  margin: 0 0 0.25rem;
-  font-size: 1rem;
-  color: #1e293b;
-}
-
-.visitor-page__rec-org {
-  margin: 0 0 0.35rem;
-  font-size: 0.9rem;
-  color: #475569;
-}
-
-.visitor-page__rec-meta,
-.visitor-page__rec-match,
-.visitor-page__rec-tags {
-  margin: 0 0 0.25rem;
-  font-size: 0.82rem;
-  color: #64748b;
-}
-
-.visitor-page__rec-match {
-  font-weight: 600;
-  color: #214bb2;
-}
-
-.visitor-page__rec-map-link {
-  display: inline-block;
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
+.visitor-page__skills-matches-link {
   font-weight: 600;
   color: #214bb2;
   text-decoration: none;
 }
 
-.visitor-page__rec-map-link:hover {
+.visitor-page__skills-matches-link:hover {
   text-decoration: underline;
 }

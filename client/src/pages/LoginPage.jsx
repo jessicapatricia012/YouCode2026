@@ -104,7 +104,8 @@ export default function LoginPage() {
         <p className="login-card__hint">
           After <code>npm run seed</code>: visitor emails like <code>visitor1@connectbc.demo</code>{' '}
           or any seeded org email — password <code>password123</code>. Your account type is stored
-          on the server; no need to pick it when signing in. Seeding clears all user-created accounts.
+          on the server; no need to pick it when signing in. Full seed wipes the DB; use{' '}
+          <code>npm run seed:append</code> to add demo data without deleting existing rows.
         </p>
       </div>
     </div>

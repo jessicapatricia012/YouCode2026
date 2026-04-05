@@ -12,6 +12,7 @@
     "build": "npm run build -w client",
     "start:server": "npm run start -w server",
     "seed": "npm run seed -w server",
+    "seed:append": "npm run seed:append -w server",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down"
   },
