@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import EventMap from '../components/EventMap.jsx';
 import FilterSidebar from '../components/FilterSidebar.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -16,6 +17,9 @@ function typesQuery(includedTypes) {
 }
 
 export default function MapPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focusEventId = (searchParams.get('event') || '').trim();
+
   const { user, logout, getAuthHeader } = useAuth();
   const [includedTypes, setIncludedTypes] = useState(() => [...EVENT_TYPE_ORDER]);
   const [events, setEvents] = useState([]);
@@ -23,6 +27,14 @@ export default function MapPage() {
   const [error, setError] = useState(null);
   const [userCoords, setUserCoords] = useState(null);
   const [radiusStepIndex, setRadiusStepIndex] = useState(0);
+
+  /** Skill-based recommendations for visitors (sidebar “For you”). */
+  const [skillRecs, setSkillRecs] = useState({
+    loading: false,
+    needsSkills: false,
+    events: [],
+    profileSkills: [],
+  });
 
   useEffect(() => {
     setIncludedTypes([...EVENT_TYPE_ORDER]);
@@ -94,6 +106,77 @@ export default function MapPage() {
     };
   }, [queryKey]);
 
+  useEffect(() => {
+    if (user?.role !== 'user') {
+      setSkillRecs({
+        loading: false,
+        needsSkills: false,
+        events: [],
+        profileSkills: [],
+      });
+      return undefined;
+    }
+
+    const typesQ = typesQuery(includedTypes);
+    if (typesQ === null) {
+      setSkillRecs({
+        loading: false,
+        needsSkills: false,
+        events: [],
+        profileSkills: [],
+      });
+      return undefined;
+    }
+
+    let cancelled = false;
+    setSkillRecs((s) => ({
+      ...s,
+      loading: true,
+    }));
+
+    const url =
+      typesQ === ''
+        ? '/api/volunteer/recommendations'
+        : `/api/volunteer/recommendations${typesQ}`;
+
+    fetch(url, { headers: getAuthHeader() })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => {
+        if (cancelled) return;
+        setSkillRecs({
+          loading: false,
+          needsSkills: !!data.needsSkills,
+          events: data.events ?? [],
+          profileSkills: data.profileSkills ?? [],
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSkillRecs({
+            loading: false,
+            needsSkills: false,
+            events: [],
+            profileSkills: [],
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.role, includedTypes, getAuthHeader]);
+
+  const pickSkillMatchEvent = useCallback(
+    (id) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('event', id);
+        return next;
+      });
+    },
+    [setSearchParams]
+  );
+
   const radiusLimitKm = RADIUS_SLIDER_STEPS_KM[radiusStepIndex] ?? null;
 
   const [radiusOverlayStepIndex, setRadiusOverlayStepIndex] = useState(null);
@@ -122,21 +205,31 @@ export default function MapPage() {
   }, []);
 
   const displayedEvents = useMemo(() => {
-    if (radiusLimitKm == null || !userCoords) return events;
-    return events.filter((ev) => {
-      if (
-        typeof ev.lat !== 'number' ||
-        typeof ev.lng !== 'number' ||
-        !Number.isFinite(ev.lat) ||
-        !Number.isFinite(ev.lng)
-      ) {
-        return false;
+    let list =
+      radiusLimitKm == null || !userCoords
+        ? events
+        : events.filter((ev) => {
+            if (
+              typeof ev.lat !== 'number' ||
+              typeof ev.lng !== 'number' ||
+              !Number.isFinite(ev.lat) ||
+              !Number.isFinite(ev.lng)
+            ) {
+              return false;
+            }
+            return (
+              haversineKm(userCoords.lat, userCoords.lng, ev.lat, ev.lng) <=
+              radiusLimitKm
+            );
+          });
+    if (focusEventId) {
+      const focused = events.find((e) => e.id === focusEventId);
+      if (focused && !list.some((e) => e.id === focusEventId)) {
+        list = [...list, focused];
       }
-      return (
-        haversineKm(userCoords.lat, userCoords.lng, ev.lat, ev.lng) <= radiusLimitKm
-      );
-    });
-  }, [events, radiusLimitKm, userCoords]);
+    }
+    return list;
+  }, [events, radiusLimitKm, userCoords, focusEventId]);
 
   const onToggleType = useCallback((type) => {
     setIncludedTypes((prev) =>
@@ -178,6 +271,12 @@ export default function MapPage() {
           e.id === ev.id ? { ...e, spotsLeft: data.spotsLeft } : e
         )
       );
+      setSkillRecs((prev) => ({
+        ...prev,
+        events: prev.events.map((e) =>
+          e.id === ev.id ? { ...e, spotsLeft: data.spotsLeft } : e
+        ),
+      }));
     },
     [getAuthHeader]
   );
@@ -198,6 +297,8 @@ export default function MapPage() {
         userEmail={user?.email}
         userRole={user?.role}
         onLogout={logout}
+        skillMatches={user?.role === 'user' ? skillRecs : null}
+        onPickSkillMatch={pickSkillMatchEvent}
       />
       <EventMap
         events={displayedEvents}
@@ -207,6 +308,7 @@ export default function MapPage() {
         userCoords={userCoords}
         radiusKm={radiusKmForCircle}
         organizerCannotVolunteer={user?.role === 'organizer'}
+        focusEventId={focusEventId || undefined}
       />
     </div>
   );

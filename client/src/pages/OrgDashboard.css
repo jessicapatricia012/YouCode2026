@@ -219,6 +219,11 @@
   color: #71717a;
 }
 
+.org-dashboard__pill--warn {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
 .org-dashboard__row-actions {
   display: flex;
   flex-wrap: wrap;

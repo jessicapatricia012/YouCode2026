@@ -33,8 +33,10 @@ export default function EventMap({
   userCoords,
   radiusKm,
   organizerCannotVolunteer = false,
+  focusEventId,
 }) {
   const mapRef = useRef(null);
+  const lastFocusedIdRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
   const [popupId, setPopupId] = useState(null);
   const [signupBusy, setSignupBusy] = useState(false);
@@ -82,7 +84,7 @@ export default function EventMap({
   }, [radiusKm, userCoords]);
 
   useEffect(() => {
-    if (!mapReady || !userCoords) return;
+    if (!mapReady || !userCoords || focusEventId) return;
     const ref = mapRef.current;
     if (!ref) return;
     const map = typeof ref.getMap === 'function' ? ref.getMap() : ref;
@@ -92,7 +94,36 @@ export default function EventMap({
       duration: 1400,
       essential: true,
     });
-  }, [mapReady, userCoords]);
+  }, [mapReady, userCoords, focusEventId]);
+
+  useEffect(() => {
+    lastFocusedIdRef.current = null;
+  }, [focusEventId]);
+
+  useEffect(() => {
+    if (!focusEventId || !mapReady) return;
+    const ev = events.find((e) => e.id === focusEventId);
+    if (
+      !ev ||
+      typeof ev.lat !== 'number' ||
+      typeof ev.lng !== 'number' ||
+      !Number.isFinite(ev.lat) ||
+      !Number.isFinite(ev.lng)
+    ) {
+      return;
+    }
+    if (lastFocusedIdRef.current === focusEventId) return;
+    lastFocusedIdRef.current = focusEventId;
+    const ref = mapRef.current;
+    const map = ref && (typeof ref.getMap === 'function' ? ref.getMap() : ref);
+    map?.flyTo?.({
+      center: [ev.lng, ev.lat],
+      zoom: 13,
+      duration: 1200,
+      essential: true,
+    });
+    setPopupId(focusEventId);
+  }, [focusEventId, mapReady, events]);
 
   const handleSignup = useCallback(async () => {
     if (!popupEvent) return;

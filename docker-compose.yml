@@ -1,6 +1,10 @@
 # Local PostgreSQL + PostGIS (matches default DATABASE_URL in server/.env.example)
 # From repo root: docker compose up -d
 # Then run migrations, then: npm run seed -w server
+#
+# POSTGRES_DB is only applied on first data volume init. If this volume was created with another
+# database name, create connectbc manually, e.g.:
+#   docker compose exec db psql -U postgres -c "CREATE DATABASE connectbc TEMPLATE template_postgis;"
 
 services:
   db:

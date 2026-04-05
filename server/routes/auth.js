@@ -1,10 +1,37 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { timingSafeEqual } from 'crypto';
 import { pool } from '../db.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 
 const router = Router();
+
+/** Stable JWT subject for env-configured admins (not stored in `users` / `orgs`). */
+const ADMIN_JWT_SUB = 'ffffffff-ffff-4fff-bfff-ffffffffffff';
+
+function adminEmailsFromEnv() {
+  const raw = process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || '';
+  return new Set(
+    raw
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+function verifyAdminPassword(plain) {
+  const expected = process.env.ADMIN_PASSWORD;
+  if (expected == null || expected === '' || plain == null) return false;
+  try {
+    const p = Buffer.from(String(plain), 'utf8');
+    const e = Buffer.from(String(expected), 'utf8');
+    if (p.length !== e.length) return false;
+    return timingSafeEqual(p, e);
+  } catch {
+    return false;
+  }
+}
 const BCRYPT_ROUNDS = 10;
 const JWT_EXPIRES = '7d';
 
@@ -69,6 +96,33 @@ async function bcryptMatches(row, plain) {
   } catch {
     return false;
   }
+}
+
+/** Postgres / network errors where credentials cannot be checked. */
+function databaseUnavailableResponse(err) {
+  const code = err?.code;
+  const msg = String(err?.message ?? '');
+  if (code === '3D000' || /database .* does not exist/i.test(msg)) {
+    return {
+      status: 503,
+      body: {
+        error: 'database_unavailable',
+        message:
+          'The PostgreSQL database is missing or the connection URL is wrong. From the repo root run `docker compose up -d`, set DATABASE_URL in server/.env, then run migrations (see server/.env.example).',
+      },
+    };
+  }
+  if (code === 'ECONNREFUSED' || code === 'ENOTFOUND') {
+    return {
+      status: 503,
+      body: {
+        error: 'database_unavailable',
+        message:
+          'Cannot connect to PostgreSQL. Start the database (e.g. `npm run db:up` from the repo root) and check DATABASE_URL in server/.env.',
+      },
+    };
+  }
+  return null;
 }
 
 /** POST /api/auth/register */
@@ -137,6 +191,11 @@ router.post('/register', async (req, res) => {
         message: 'An account with this email already exists.',
       });
     }
+    const dbErr = databaseUnavailableResponse(err);
+    if (dbErr) {
+      console.error(err);
+      return res.status(dbErr.status).json(dbErr.body);
+    }
     console.error(err);
     res.status(500).json({ error: 'server_error' });
   }
@@ -156,6 +215,30 @@ router.post('/login', async (req, res) => {
 
     if (!e || !p) {
       return res.status(400).json({ error: 'invalid_input', message: 'Email and password are required.' });
+    }
+
+    const adminEmails = adminEmailsFromEnv();
+    const isConfiguredAdminEmail =
+      adminEmails.size > 0 && adminEmails.has(e);
+    if (isConfiguredAdminEmail && verifyAdminPassword(p)) {
+      const token = signAccountToken({
+        id: ADMIN_JWT_SUB,
+        email: e,
+        name: 'Administrator',
+        role: 'admin',
+      });
+      return res.json({
+        token,
+        user: {
+          id: ADMIN_JWT_SUB,
+          email: e,
+          name: 'Administrator',
+          role: 'admin',
+          website: null,
+          logoUrl: null,
+          createdAt: null,
+        },
+      });
     }
 
     const { rows: uRows } = await pool.query(
@@ -194,11 +277,30 @@ router.post('/login', async (req, res) => {
       return res.json({ token, user });
     }
 
+    const hasDbAccount = !!(u || o);
+    if (!hasDbAccount) {
+      if (isConfiguredAdminEmail) {
+        return res.status(401).json({
+          error: 'wrong_password',
+          message: 'Incorrect password.',
+        });
+      }
+      return res.status(401).json({
+        error: 'unknown_email',
+        message: 'No account exists for this email.',
+      });
+    }
+
     return res.status(401).json({
-      error: 'invalid_credentials',
-      message: 'Invalid email or password.',
+      error: 'wrong_password',
+      message: 'Incorrect password.',
     });
   } catch (err) {
+    const dbErr = databaseUnavailableResponse(err);
+    if (dbErr) {
+      console.error(err);
+      return res.status(dbErr.status).json(dbErr.body);
+    }
     console.error(err);
     res.status(500).json({ error: 'server_error' });
   }
@@ -207,6 +309,20 @@ router.post('/login', async (req, res) => {
 /** GET /api/auth/me */
 router.get('/me', requireAuth, async (req, res) => {
   try {
+    if (req.auth.role === 'admin') {
+      return res.json({
+        user: {
+          id: req.auth.id,
+          email: req.auth.email,
+          name: req.auth.name,
+          role: 'admin',
+          website: null,
+          logoUrl: null,
+          createdAt: null,
+        },
+      });
+    }
+
     if (req.auth.role === 'user') {
       const { rows } = await pool.query(
         `SELECT id, display_name, email, created_at FROM users WHERE id = $1`,
@@ -227,6 +343,11 @@ router.get('/me', requireAuth, async (req, res) => {
     }
     res.json({ user: serializeOrganizer(rows[0]) });
   } catch (err) {
+    const dbErr = databaseUnavailableResponse(err);
+    if (dbErr) {
+      console.error(err);
+      return res.status(dbErr.status).json(dbErr.body);
+    }
     console.error(err);
     res.status(500).json({ error: 'server_error' });
   }

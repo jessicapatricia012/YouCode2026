@@ -27,6 +27,7 @@ export default function EditEventPage() {
   const [loadError, setLoadError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState(null);
+  const [removedByAdminAt, setRemovedByAdminAt] = useState(null);
 
   const loadEvent = useCallback(async () => {
     if (!id) return;
@@ -58,6 +59,7 @@ export default function EditEventPage() {
       setSpotsTotal(String(ev.spotsTotal ?? ''));
       setWebsiteUrl(ev.websiteUrl ?? '');
       setSkillTags(normalizeSkillTagsClient(ev.skillTags ?? []));
+      setRemovedByAdminAt(ev.removedByAdminAt ?? null);
     } catch {
       setLoadError('Could not load this event. Is the API running?');
     } finally {
@@ -95,6 +97,7 @@ export default function EditEventPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (removedByAdminAt) return;
     setFormError(null);
     setSubmitting(true);
 
@@ -140,7 +143,12 @@ export default function EditEventPage() {
         return;
       }
       if (r.status === 403) {
-        setFormError('You cannot update this event.');
+        setFormError(
+          data.error === 'moderated'
+            ? data.message ||
+              'This listing was removed by site administrators and cannot be edited.'
+            : 'You cannot update this event.'
+        );
         return;
       }
       if (r.status === 404) {
@@ -196,6 +204,12 @@ export default function EditEventPage() {
 
       {!loadingEvent && !loadError && (
         <form className="post-event__form" onSubmit={handleSubmit}>
+          {removedByAdminAt && (
+            <p className="post-event__banner post-event__banner--error" role="alert">
+              This listing was removed by site administrators and is no longer on the public map. You
+              cannot edit it.
+            </p>
+          )}
           {formError && (
             <p className="post-event__banner post-event__banner--error" role="alert">
               {formError}
@@ -212,7 +226,7 @@ export default function EditEventPage() {
               required
               maxLength={500}
               autoComplete="off"
-              disabled={submitting}
+              disabled={submitting || !!removedByAdminAt}
             />
           </label>
 
@@ -222,7 +236,7 @@ export default function EditEventPage() {
               className="post-event__input"
               value={type}
               onChange={(e) => setType(e.target.value)}
-              disabled={submitting}
+              disabled={submitting || !!removedByAdminAt}
             >
               {EVENT_TYPE_ORDER.map((key) => (
                 <option key={key} value={key}>
@@ -239,7 +253,7 @@ export default function EditEventPage() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={5}
-              disabled={submitting}
+              disabled={submitting || !!removedByAdminAt}
             />
           </label>
 
@@ -251,7 +265,7 @@ export default function EditEventPage() {
             <SkillTagPicker
               value={skillTags}
               onChange={setSkillTags}
-              disabled={submitting}
+              disabled={submitting || !!removedByAdminAt}
               idPrefix="edit-skill"
             />
           </div>
@@ -267,7 +281,7 @@ export default function EditEventPage() {
               required
               placeholder="e.g. 8345 Winston St"
               autoComplete="street-address"
-              disabled={submitting}
+              disabled={submitting || !!removedByAdminAt}
             />
           </label>
 
@@ -281,7 +295,7 @@ export default function EditEventPage() {
               required
               placeholder="e.g. Burnaby"
               autoComplete="address-level2"
-              disabled={submitting}
+              disabled={submitting || !!removedByAdminAt}
             />
             <span className="post-event__hint">BC only — province is added for the map pin.</span>
           </label>
@@ -296,7 +310,7 @@ export default function EditEventPage() {
               placeholder="https://… or yoursite.org/event"
               autoComplete="url"
               inputMode="url"
-              disabled={submitting}
+              disabled={submitting || !!removedByAdminAt}
             />
           </label>
 
@@ -309,7 +323,7 @@ export default function EditEventPage() {
                 value={startsAt}
                 onChange={(e) => setStartsAt(e.target.value)}
                 required
-                disabled={submitting}
+                disabled={submitting || !!removedByAdminAt}
               />
             </label>
             <label className="post-event__field post-event__field--half">
@@ -319,7 +333,7 @@ export default function EditEventPage() {
                 className="post-event__input"
                 value={endsAt}
                 onChange={(e) => setEndsAt(e.target.value)}
-                disabled={submitting}
+                disabled={submitting || !!removedByAdminAt}
               />
             </label>
           </div>
@@ -333,7 +347,7 @@ export default function EditEventPage() {
               step={1}
               value={spotsTotal}
               onChange={(e) => setSpotsTotal(e.target.value)}
-              disabled={submitting}
+              disabled={submitting || !!removedByAdminAt}
             />
           </label>
 
@@ -341,7 +355,7 @@ export default function EditEventPage() {
             <button
               type="submit"
               className="post-event__submit"
-              disabled={submitting}
+              disabled={submitting || !!removedByAdminAt}
             >
               {submitting ? 'Saving…' : 'Save changes'}
             </button>

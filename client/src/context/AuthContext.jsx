@@ -67,9 +67,13 @@ export function AuthProvider({ children }) {
     if (!r.ok) {
       const msg =
         data.message ||
-        (data.error === 'invalid_credentials'
-          ? 'Invalid email or password.'
-          : 'Login failed.');
+        (data.error === 'database_unavailable'
+          ? 'Database is not reachable. Start Postgres (e.g. npm run db:up) and check server/.env DATABASE_URL.'
+          : data.error === 'unknown_email'
+            ? 'No account exists for this email.'
+            : data.error === 'wrong_password'
+              ? 'Incorrect password.'
+              : 'Login failed.');
       throw new Error(msg);
     }
     localStorage.setItem(TOKEN_KEY, data.token);

@@ -1,23 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import SkillTagPicker from '../components/SkillTagPicker.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
-import { normalizeSkillTagsClient, SKILL_TAGS } from '../skillTags.js';
+import { normalizeSkillTagsClient } from '../skillTags.js';
 import './VisitorPage.css';
-
-function formatStartsAt(iso) {
-  try {
-    return new Intl.DateTimeFormat('en-CA', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
-}
 
 export default function VisitorPage() {
   const { getAuthHeader } = useAuth();
@@ -33,30 +19,10 @@ export default function VisitorPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
-  const [recs, setRecs] = useState(null);
-  const [recsLoading, setRecsLoading] = useState(false);
-
-  const loadRecommendations = useCallback(async () => {
-    setRecsLoading(true);
-    try {
-      const r = await fetch('/api/volunteer/recommendations', {
-        headers: getAuthHeader(),
-      });
-      if (r.ok) setRecs(await r.json());
-    } catch {
-      /* ignore */
-    } finally {
-      setRecsLoading(false);
-    }
-  }, [getAuthHeader]);
 
   useEffect(() => {
     fetchProfile();
   }, []);
-
-  useEffect(() => {
-    if (!loading) loadRecommendations();
-  }, [loading, loadRecommendations]);
 
   async function fetchProfile() {
     try {
@@ -94,7 +60,6 @@ export default function VisitorPage() {
       });
       if (r.ok) {
         setMessage({ type: 'success', text: 'Profile updated successfully!' });
-        await loadRecommendations();
       } else {
         setMessage({ type: 'error', text: 'Failed to update profile.' });
       }
@@ -129,67 +94,27 @@ export default function VisitorPage() {
       <header className="visitor-header">
         <h1>Volunteer Profile</h1>
         <p>Help us match you with the right opportunities by sharing your skills and availability.</p>
+        <p className="visitor-header__matches">
+          <Link to="/" className="visitor-header__matches-link">
+            Open the map — the sidebar “For you” section lists events that fit your skills; tap one to
+            show its pin.
+          </Link>
+        </p>
       </header>
 
       <form className="visitor-form" onSubmit={handleSubmit}>
         <section className="form-section">
           <h2>Skills</h2>
-          <p>Choose tags that match what you can offer — we&apos;ll suggest events that need them.</p>
+          <p>
+            Choose tags that match what you can offer. On the map, use the sidebar “For you” section
+            (see link above) to open events that need these skills.
+          </p>
           <SkillTagPicker
             value={profile.skills}
             onChange={(skills) => setProfile({ ...profile, skills })}
             disabled={saving}
             idPrefix="visitor-skill"
           />
-          <p className="visitor-page__rec-hint">
-            Save your profile to refresh recommendations below.
-          </p>
-        </section>
-
-        <section className="form-section visitor-page__recommendations">
-          <h2>Recommended for you</h2>
-          {recsLoading && <p className="visitor-page__rec-muted">Loading suggestions…</p>}
-          {!recsLoading && recs?.needsSkills && (
-            <p className="visitor-page__rec-muted">
-              Add at least one skill tag above to see matching events.
-            </p>
-          )}
-          {!recsLoading && recs && !recs.needsSkills && recs.events.length === 0 && (
-            <p className="visitor-page__rec-muted">
-              No upcoming events match your skills yet. Check back later or try the map.
-            </p>
-          )}
-          {!recsLoading && recs && !recs.needsSkills && recs.events.length > 0 && (
-            <ul className="visitor-page__rec-list">
-              {recs.events.map((ev) => (
-                <li key={ev.id} className="visitor-page__rec-card">
-                  <h3 className="visitor-page__rec-title">{ev.title}</h3>
-                  <p className="visitor-page__rec-org">{ev.orgName}</p>
-                  <p className="visitor-page__rec-meta">
-                    {formatStartsAt(ev.startsAt)}
-                    {ev.spotsLeft > 0
-                      ? ` · ${ev.spotsLeft} spot${ev.spotsLeft === 1 ? '' : 's'} left`
-                      : ' · Full'}
-                  </p>
-                  {ev.skillMatchCount > 0 && (
-                    <p className="visitor-page__rec-match">
-                      {ev.skillMatchCount} matching skill{ev.skillMatchCount === 1 ? '' : 's'}
-                    </p>
-                  )}
-                  {ev.skillTags?.length > 0 && (
-                    <p className="visitor-page__rec-tags">
-                      {ev.skillTags
-                        .map((id) => SKILL_TAGS.find((t) => t.id === id)?.label ?? id)
-                        .join(' · ')}
-                    </p>
-                  )}
-                  <Link to="/" className="visitor-page__rec-map-link">
-                    Open map
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
         </section>
 
         <section className="form-section">

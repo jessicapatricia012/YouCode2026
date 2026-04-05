@@ -13,6 +13,7 @@ import OrgDashboard from './pages/OrgDashboard.jsx';
 import PostEventPage from './pages/PostEventPage.jsx';
 import EditEventPage from './pages/EditEventPage.jsx';
 import VisitorPage from './pages/VisitorPage.jsx';
+import AdminPage from './pages/AdminPage.jsx';
 import './App.css';
 
 function ProtectedRoute({ children }) {
@@ -46,6 +47,21 @@ function OrganizerOnly({ children }) {
     );
   }
   if (user?.role !== 'organizer') {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
+function AdminOnly({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="auth-boot">
+        <p>Checking session…</p>
+      </div>
+    );
+  }
+  if (user?.role !== 'admin') {
     return <Navigate to="/" replace />;
   }
   return children;
@@ -100,6 +116,16 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <VisitorPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute>
+            <AdminOnly>
+              <AdminPage />
+            </AdminOnly>
           </ProtectedRoute>
         }
       />

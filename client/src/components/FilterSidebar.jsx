@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   EVENT_TYPE_ORDER,
   EVENT_TYPE_COLORS,
   EVENT_TYPE_LABELS,
 } from '../eventTypes.js';
+import { SKILL_TAGS } from '../skillTags.js';
 import { RADIUS_SLIDER_STEPS_KM, radiusStepLabel } from '../mapRadius.js';
 
 const RADIUS_SLIDER_MAX = RADIUS_SLIDER_STEPS_KM.length - 1;
@@ -34,6 +35,8 @@ export default function FilterSidebar({
   userEmail,
   userRole,
   onLogout,
+  skillMatches,
+  onPickSkillMatch,
 }) {
   const [localRadiusIndex, setLocalRadiusIndex] = useState(radiusStepIndex);
   const radiusSliderRef = useRef(null);
@@ -76,6 +79,11 @@ export default function FilterSidebar({
   const displayName =
     (orgName && String(orgName).trim()) || userEmail?.split('@')[0] || '?';
   const avatarLetter = (displayName || userEmail || '?').charAt(0).toUpperCase();
+
+  const profileSkillSet = useMemo(() => {
+    if (!skillMatches || skillMatches.needsSkills) return new Set();
+    return new Set(skillMatches.profileSkills ?? []);
+  }, [skillMatches]);
 
   return (
     <aside className="sidebar">
@@ -180,6 +188,76 @@ export default function FilterSidebar({
             <strong className="sidebar__warn"> Select at least one type to see pins.</strong>
           )}
         </p>
+
+        {skillMatches && userRole === 'user' ? (
+          <section className="sidebar__matches" aria-label="Events matching your skills">
+            <h2 className="sidebar__matches-title">For you</h2>
+            {skillMatches.loading ? (
+              <p className="sidebar__matches-muted">Loading matches…</p>
+            ) : skillMatches.needsSkills ? (
+              <>
+                <p className="sidebar__matches-muted">
+                  Add skills on your profile to see events that need them.
+                </p>
+                <Link to="/visitor" className="sidebar__matches-link">
+                  Edit profile
+                </Link>
+              </>
+            ) : skillMatches.events.length === 0 ? (
+              <p className="sidebar__matches-muted">
+                No skill matches for the types you have selected. Try selecting more types or check
+                back later.
+              </p>
+            ) : (
+              <>
+                <p className="sidebar__matches-legend">Tap an event to show it on the map.</p>
+                <ul className="sidebar__matches-list">
+                  {skillMatches.events.map((ev) => {
+                    const needed = Array.isArray(ev.skillTags)
+                      ? [...ev.skillTags].sort((a, b) => {
+                          const ma = profileSkillSet.has(a) ? 0 : 1;
+                          const mb = profileSkillSet.has(b) ? 0 : 1;
+                          if (ma !== mb) return ma - mb;
+                          return a.localeCompare(b);
+                        })
+                      : [];
+                    return (
+                      <li key={ev.id}>
+                        <button
+                          type="button"
+                          className="sidebar__match-btn"
+                          onClick={() => onPickSkillMatch?.(ev.id)}
+                        >
+                          <span className="sidebar__match-btn-title">{ev.title}</span>
+                          <span className="sidebar__match-btn-org">{ev.orgName}</span>
+                          {needed.length > 0 ? (
+                            <span className="sidebar__match-skills" role="list">
+                              {needed.map((id) => {
+                                const isMatch = profileSkillSet.has(id);
+                                const label =
+                                  SKILL_TAGS.find((t) => t.id === id)?.label ?? id;
+                                return (
+                                  <span
+                                    key={id}
+                                    role="listitem"
+                                    className={`sidebar__match-skill${isMatch ? ' sidebar__match-skill--match' : ' sidebar__match-skill--other'}`}
+                                    title={isMatch ? 'On your profile' : 'Not on your profile'}
+                                  >
+                                    {label}
+                                  </span>
+                                );
+                              })}
+                            </span>
+                          ) : null}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+          </section>
+        ) : null}
       </div>
 
       <footer className="sidebar__footer">
@@ -201,11 +279,20 @@ export default function FilterSidebar({
                 <span
                   className={`sidebar__role-badge sidebar__role-badge--compact sidebar__role-badge--${userRole}`}
                 >
-                  {userRole === 'organizer' ? 'Org' : 'Visitor'}
+                  {userRole === 'organizer'
+                    ? 'Org'
+                    : userRole === 'admin'
+                      ? 'Admin'
+                      : 'Visitor'}
                 </span>
               ) : null}
             </div>
             <div className="sidebar__user-actions">
+              {userRole === 'admin' && (
+                <Link to="/admin" className="sidebar__user-action sidebar__user-action--primary">
+                  Moderation
+                </Link>
+              )}
               {userRole === 'organizer' && (
                 <Link to="/dashboard" className="sidebar__user-action sidebar__user-action--primary">
                   Manage listings
